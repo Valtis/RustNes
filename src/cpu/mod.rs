@@ -1,28 +1,52 @@
-use rom_reader::Rom;
-use rom_reader::TvSystem;
+use rom::TvSystem;
 
-pub fn get_cpu(rom: Rom) -> Cpu {
 
-    Cpu::new(rom.header.tv_system)
+pub fn get_cpu(tv_system: &TvSystem) -> Cpu {
+    Cpu::new(tv_system)
 }
 
 
 #[derive(Debug)]
 pub struct Cpu {
-    color_subcarrier_frequency: f64,
-    master_clock_frequency: f64,
-    clock_divisor: u8,
-    cpu_clock_frequency: f64
+    pub frequency: Frequency,
+    pub program_counter:u16,
+    pub wait_counter: u8, // used by instructions that take more than 1 cycle to complete
+    pub status_flags:u8,
+    pub x: u8,
+    pub y: u8,
+    pub a: u8,
 }
 
 impl Cpu {
-    fn new(tv_system: TvSystem) -> Cpu {
+    fn new(tv_system: &TvSystem) -> Cpu {
+        Cpu {
+            frequency: Frequency::new(&tv_system),
+            program_counter: 0,
+            status_flags: 0x34, // unused 4 and 5 bits to 1; interrupt flag at 2 bit to 1
+            wait_counter: 0,
+            a: 0,
+            x: 0,
+            y: 0,
+        }
+    }
+}
+#[derive(Debug)]
+pub struct Frequency {
+    color_subcarrier_frequency: f64,
+    master_clock_frequency: f64,
+    clock_divisor: u8,
+    pub cpu_clock_frequency: f64
+}
 
-        let mut divisor = 0;
-        let mut color_freq = 0.0;
-        let mut master_freq = 0.0;
 
-        match tv_system {
+impl Frequency {
+    fn new(tv_system: &TvSystem) -> Frequency {
+
+        let mut divisor:u8;
+        let mut color_freq:f64;
+        let mut master_freq:f64;
+
+        match *tv_system {
             TvSystem::Uninitialized => panic!("Uninitialized tv system type when initializing cpu"),
             TvSystem::PAL => {
                 divisor = 16;
@@ -36,7 +60,7 @@ impl Cpu {
 
         master_freq = 6.0*color_freq;
 
-        Cpu {
+        Frequency {
             color_subcarrier_frequency: color_freq,
             master_clock_frequency: master_freq,
             clock_divisor: divisor,

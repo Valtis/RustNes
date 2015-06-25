@@ -1,5 +1,4 @@
 use std::fs::File;
-use std::io::Read;
 use std::slice::Iter;
 use std::iter::Peekable;
 use std::io::Write;
@@ -188,10 +187,10 @@ fn write(file: &mut File, iter :&mut Peekable<Iter<u8>>) {
 
 
 fn write_absolute(file: &mut File, iter :&mut Peekable<Iter<u8>>, instruction: &str) {
-    let low_nybble = *iter.next().unwrap();
-    let hi_nybble = *iter.next().unwrap();
+    let low_byte = *iter.next().unwrap();
+    let high_byte = *iter.next().unwrap();
 
-    let operand:u16 = ((hi_nybble as u16) << 8) | low_nybble as u16;
+    let operand:u16 = ((high_byte as u16) << 8) | low_byte as u16;
     write!(file, "{} ${:x}", instruction, operand).unwrap();
 }
 
@@ -206,26 +205,26 @@ fn write_absolute_y(file: &mut File, iter :&mut Peekable<Iter<u8>>, instruction:
 }
 
 fn write_indirect(file: &mut File, iter :&mut Peekable<Iter<u8>>, instruction: &str) {
-    let low_nybble = *iter.next().unwrap();
-    let hi_nybble = *iter.next().unwrap();
+    let low_byte = *iter.next().unwrap();
+    let high_byte = *iter.next().unwrap();
 
-    let operand:u16 = ((hi_nybble as u16) << 8) | low_nybble as u16;
+    let operand:u16 = ((high_byte as u16) << 8) | low_byte as u16;
     write!(file, "{} (${:x})", instruction, operand).unwrap();
 }
 
 fn write_indirect_x(file: &mut File, iter :&mut Peekable<Iter<u8>>, instruction: &str) {
-    let low_nybble = *iter.next().unwrap();
-    let hi_nybble = *iter.next().unwrap();
+    let low_byte = *iter.next().unwrap();
+    let high_byte = *iter.next().unwrap();
 
-    let operand:u16 = ((hi_nybble as u16) << 8) | low_nybble as u16;
+    let operand:u16 = ((high_byte as u16) << 8) | low_byte as u16;
     write!(file, "{} (${:x},X)", instruction, operand).unwrap();
 }
 
 fn write_indirect_y(file: &mut File, iter :&mut Peekable<Iter<u8>>, instruction: &str) {
-    let low_nybble = *iter.next().unwrap();
-    let hi_nybble = *iter.next().unwrap();
+    let low_byte = *iter.next().unwrap();
+    let high_byte = *iter.next().unwrap();
 
-    let operand:u16 = ((hi_nybble as u16) << 8) | low_nybble as u16;
+    let operand:u16 = ((high_byte as u16) << 8) | low_byte as u16;
     write!(file, "{} (${:x},Y)", instruction, operand).unwrap();
 }
 

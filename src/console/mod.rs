@@ -1,0 +1,323 @@
+extern crate time;
+
+use cpu::Cpu;
+use cpu::get_cpu;
+use memory::Memory;
+use rom::read_rom;
+
+pub struct Console {
+    cpu: Cpu,
+    memory: Memory
+}
+
+impl Console {
+    pub fn new (rom_path: &str) -> Console {
+        let rom = read_rom(rom_path);
+
+        let mut console = Console {
+            cpu: get_cpu(&rom.header.tv_system),
+            memory: Memory::new(),
+        };
+
+        console.memory.set_rom(rom);
+        console
+    }
+
+    pub fn execute(&mut self) {
+        let mut avg_cycle = 0.0;
+        let cycle_time_in_nanoseconds = (1.0/(self.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
+        println!("CPU frequency: {}", self.cpu.frequency.cpu_clock_frequency);
+        println!("Cycle time in nanoseconds: {}", cycle_time_in_nanoseconds);
+
+        let mut cycles = 0;
+        let mut time = time::precise_time_ns();
+        let max_cycles = (self.cpu.frequency.cpu_clock_frequency*1000_000.0) as u32;
+        let cpu_cycles_per_frame = 100;
+
+        // 0xFFFC contains  location of first instruction
+        self.cpu.program_counter = 0xFFFC;
+        self.jump_absolute();
+
+        println!("\nPC: {}\n", self.cpu.program_counter);
+
+        loop {
+            let current_time = time::precise_time_ns();
+            let time_taken = current_time - time;
+
+            // execute cpu_cycles_per_frame cycles every cpu_cycle_per_frame * cycle_time nanoseconds.
+            // the 6502 has frequency around ~2 MHZ whics means that a cycle needs to be
+            // executed every ~500ns. This however is not really possible even with high precision
+            // timers. However, executing, say, 10 cycles every 5000ns is far more achievable.
+
+            if time_taken > cycle_time_in_nanoseconds * cpu_cycles_per_frame {
+                avg_cycle += time_taken as f64;
+
+                for _ in 0..cpu_cycles_per_frame {
+
+                    // ensure instruction timing
+                    if self.cpu.wait_counter > 0 {
+                        self.cpu.wait_counter -= 1;
+                        continue;
+                    }
+
+                    let instruction = self.memory.read(self.cpu.program_counter);
+                    self.cpu.program_counter += 1;
+                    self.execute_instruction(instruction);
+
+                    cycles += 1;
+                }
+
+                time = current_time;
+            }
+            if cycles >= max_cycles {
+                break;
+            }
+        }
+
+        println!("Avg cycle length: {}", avg_cycle/max_cycles as f64);
+        println!("Duration: {}", avg_cycle as f64/ 1000_000_000.0)
+    }
+
+    fn execute_instruction(&mut self, instruction: u8) {
+        match instruction {
+            76 => { self.jump_absolute(); }
+            120 => { self.set_interrupt_disable_flag(); }
+            162 => { self.load_x_immediate(); }
+            216 => { self.clear_decimal_flag(); }
+            _ => panic!("Invalid opcode {} (PC: {})", instruction, self.cpu.program_counter - 1),
+        }
+
+    }
+
+    fn get_2_byte_operand(&mut self) -> u16 {
+        let low_byte = self.memory.read(self.cpu.program_counter);
+        self.cpu.program_counter += 1;
+        let high_byte = self.memory.read(self.cpu.program_counter);
+        self.cpu.program_counter += 1;
+
+         ((high_byte as u16) << 8) | low_byte as u16
+    }
+
+    fn get_byte_operand(&mut self) -> u8 {
+        let byte = self.memory.read(self.cpu.program_counter);
+        self.cpu.program_counter += 1;
+        byte
+    }
+
+    fn jump_absolute(&mut self) {
+        self.cpu.wait_counter = 3;
+        self.cpu.program_counter = self.get_2_byte_operand();
+    }
+
+    fn set_interrupt_disable_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags | 0x04; // set second bit
+    }
+
+    fn load_x_immediate(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.x = self.get_byte_operand();
+
+        // set negative flag
+        self.cpu.status_flags = (self.cpu.status_flags & 0x7F) | (self.cpu.x & 0x80);
+
+        if self.cpu.x == 0 {
+            // set zero flag
+            self.cpu.status_flags = self.cpu.status_flags | 0x02;
+        } else {
+            // reset zero flag
+            self.cpu.status_flags = self.cpu.status_flags & 0xFD;
+        }
+    }
+
+    fn clear_decimal_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear third bit
+    }
+
+}
+
+
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use cpu::get_cpu;
+    use memory::Memory;
+    use rom::TvSystem;
+
+    fn create_test_console() -> Console {
+        Console {
+            memory: Memory::new(),
+            cpu: get_cpu(&TvSystem::NTSC),
+        }
+    }
+
+
+    #[test]
+    fn read_2_bytes_reads_values_correctly_and_updates_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0xAD);
+        console.memory.write(25, 0x04);
+        assert_eq!(0x04AD, console.get_2_byte_operand());
+        assert_eq!(26, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn get_byte_operand_gets_correct_value_and_updates_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0xAD);
+        assert_eq!(0xAD, console.get_byte_operand());
+        assert_eq!(25, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn jump_absolute_sets_program_counter_to_new_value() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0;
+        console.memory.write(0, 0x15);
+        console.memory.write(1, 0xF0);
+        console.jump_absolute();
+        assert_eq!(0xf015, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn jump_absoulte_sets_wait_timer_correctly() {
+        let mut console = create_test_console();
+
+        console.jump_absolute();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn setting_interrupt_disable_flag_does_nothing_if_flag_is_already_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD5;
+        console.set_interrupt_disable_flag();
+        assert_eq!(0xD5, console.cpu.status_flags);
+    }
+
+
+    #[test]
+    fn setting_interrupt_disable_flag_sets_the_flag_and_does_not_touch_other_flags() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xC3;
+        console.set_interrupt_disable_flag();
+        assert_eq!(0xC7, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn setting_interrupt_disable_flag_sets_wait_timer_correctly() {
+        let mut console = create_test_console();
+
+        console.set_interrupt_disable_flag();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn load_x_immediate_sets_x_to_the_value_given_in_next_byte() {
+        let mut console = create_test_console();
+
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0x23);
+        console.load_x_immediate();
+        assert_eq!(0x23, console.cpu.x);
+    }
+
+    #[test]
+    fn load_x_immediate_sets_negative_flag_and_does_not_touch_other_flags_if_value_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x4C;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.load_x_immediate();
+        assert_eq!(0xCC, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_x_immediate_sets_zero_flag_and_does_not_touch_other_flags_if_value_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x4C;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0);
+        console.load_x_immediate();
+        assert_eq!(0x4E, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_x_immediate_resets_zero_flag_when_value_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x72;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.load_x_immediate();
+        assert_eq!(0xF0, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_x_immediate_resets_negative_flag_when_value_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xFC;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0);
+        console.load_x_immediate();
+        assert_eq!(0x7E, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_x_immediate_does_nothing_to_flags_with_negative_value_if_negative_flag_was_set_before() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xFC;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.load_x_immediate();
+        assert_eq!(0xFC, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_x_immediate_does_nothing_to_flags_with_zero_value_if_zero_flag_was_set_before() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x43;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0);
+        console.load_x_immediate();
+        assert_eq!(0x43, console.cpu.status_flags);
+    }
+
+
+    #[test]
+    fn load_x_immediate_sets_wait_timer_correctly() {
+        let mut console = create_test_console();
+        console.load_x_immediate();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+
+
+    #[test]
+    fn clear_decimal_flags_clears_the_flag_and_does_not_touch_other_flags() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xCF;
+        console.clear_decimal_flag();
+        assert_eq!(0xC7, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_decimal_flags_does_nothing_if_flag_is_already_cleared() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD6;
+        console.clear_decimal_flag();
+        assert_eq!(0xD6, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_decimal_flags_sets_wait_counter_correctly() {
+        let mut console = create_test_console();
+        console.clear_decimal_flag();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+}

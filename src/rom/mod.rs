@@ -2,8 +2,6 @@
 use std::fs::File;
 use std::io::Read;
 
-
-
 pub fn read_rom(file_path: &str) -> Rom {
 
     let mut rom = Rom::new();
@@ -51,7 +49,7 @@ pub struct Rom {
 
 
 impl Rom {
-    fn new() -> Rom {
+    pub fn new() -> Rom {
         Rom {
             header: RomHeader::new(),
             trainer: vec![],
