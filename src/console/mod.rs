@@ -82,11 +82,27 @@ impl Console {
         match instruction {
             76 => { self.jump_absolute(); }
             120 => { self.set_interrupt_disable_flag(); }
+            154 => { self.transfer_x_to_stack_pointer(); }
             162 => { self.load_x_immediate(); }
+            173 => { self.load_a_absolute(); }
             216 => { self.clear_decimal_flag(); }
             _ => panic!("Invalid opcode {} (PC: {})", instruction, self.cpu.program_counter - 1),
         }
 
+    }
+
+    fn set_negative_flag(&mut self, value: u8) {
+        self.cpu.status_flags = (self.cpu.status_flags & 0x7F) | (value & 0x80);
+    }
+
+    fn set_zero_flag(&mut self, value: u8) {
+        if value == 0 {
+            // set zero flag
+            self.cpu.status_flags = self.cpu.status_flags | 0x02;
+        } else {
+            // reset zero flag
+            self.cpu.status_flags = self.cpu.status_flags & 0xFD;
+        }
     }
 
     fn get_2_byte_operand(&mut self) -> u16 {
@@ -114,20 +130,28 @@ impl Console {
         self.cpu.status_flags = self.cpu.status_flags | 0x04; // set second bit
     }
 
+    fn transfer_x_to_stack_pointer(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.stack_pointer = self.cpu.x;
+    }
+
     fn load_x_immediate(&mut self) {
         self.cpu.wait_counter = 2;
-        self.cpu.x = self.get_byte_operand();
+        let operand = self.get_byte_operand();
+        self.cpu.x = operand;
 
-        // set negative flag
-        self.cpu.status_flags = (self.cpu.status_flags & 0x7F) | (self.cpu.x & 0x80);
+        self.set_negative_flag(operand);
+        self.set_zero_flag(operand);
+    }
 
-        if self.cpu.x == 0 {
-            // set zero flag
-            self.cpu.status_flags = self.cpu.status_flags | 0x02;
-        } else {
-            // reset zero flag
-            self.cpu.status_flags = self.cpu.status_flags & 0xFD;
-        }
+    fn load_a_absolute(&mut self) {
+        self.cpu.wait_counter = 4;
+        let address = self.get_2_byte_operand();
+        let operand = self.memory.read(address);
+        self.cpu.a = operand;
+        self.set_negative_flag(operand);
+        self.set_zero_flag(operand);
+
     }
 
     fn clear_decimal_flag(&mut self) {
@@ -154,7 +178,69 @@ mod tests {
             cpu: get_cpu(&TvSystem::NTSC),
         }
     }
+    #[test]
+    fn set_negative_flag_sets_the_flag_if_flag_value_is_negative_and_flag_was_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.set_negative_flag(0xFF);
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
 
+    #[test]
+    fn set_negative_flag_does_nothing_if_value_is_negative_and_flag_was_already_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD5;
+        console.set_negative_flag(0xFF);
+        assert_eq!(0xD5, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_negative_flag_unsets_the_flag_if_flag_is_set_and_value_was_positive() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD0;
+        console.set_negative_flag(0x05);
+        assert_eq!(0x50, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_negative_flag_does_nothing_if_flag_is_unset_and_value_is_positive() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x7F;
+        console.set_negative_flag(0x7F);
+        assert_eq!(0x7F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_zero_flag_sets_the_flag_if_flag_value_is_zero_and_flag_was_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.set_zero_flag(0);
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_zero_flag_does_nothing_if_value_is_zero_and_flag_was_already_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD3;
+        console.set_zero_flag(0);
+        assert_eq!(0xD3, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_zero_flag_unsets_the_flag_if_flag_is_set_and_value_was_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xDF;
+        console.set_zero_flag(0x05);
+        assert_eq!(0xDD, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_zero_flag_does_nothing_if_flag_is_unset_and_value_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x70;
+        console.set_zero_flag(0xFF);
+        assert_eq!(0x70, console.cpu.status_flags);
+    }
 
     #[test]
     fn read_2_bytes_reads_values_correctly_and_updates_program_counter() {
@@ -186,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn jump_absoulte_sets_wait_timer_correctly() {
+    fn jump_absoulte_sets_wait_counter_correctly() {
         let mut console = create_test_console();
 
         console.jump_absolute();
@@ -211,10 +297,33 @@ mod tests {
     }
 
     #[test]
-    fn setting_interrupt_disable_flag_sets_wait_timer_correctly() {
+    fn setting_interrupt_disable_flag_sets_wait_counter_correctly() {
         let mut console = create_test_console();
-
         console.set_interrupt_disable_flag();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn transfer_x_to_stack_pointer_sets_stack_pointer_to_correct_value() {
+        let mut console = create_test_console();
+        console.cpu.x = 0xFC;
+        console.transfer_x_to_stack_pointer();
+        assert_eq!(0xFC, console.cpu.stack_pointer);
+    }
+
+    #[test]
+    fn transfer_x_to_stack_pointer_does_not_touch_flags() {
+        let mut console = create_test_console();
+        console.cpu.x = 0xFC;
+        console.cpu.status_flags = 0xAB;
+        console.transfer_x_to_stack_pointer();
+        assert_eq!(0xAB, console.cpu.status_flags);
+    }
+    #[test]
+
+    fn transfer_x_to_stack_pointer_sets_wait_counter_correct() {
+        let mut console = create_test_console();
+        console.transfer_x_to_stack_pointer();
         assert_eq!(2, console.cpu.wait_counter);
     }
 
@@ -290,13 +399,108 @@ mod tests {
 
 
     #[test]
-    fn load_x_immediate_sets_wait_timer_correctly() {
+    fn load_x_immediate_sets_wait_counter_correctly() {
         let mut console = create_test_console();
         console.load_x_immediate();
         assert_eq!(2, console.cpu.wait_counter);
     }
 
+    #[test]
+    fn load_a_absolute_loads_correct_value_from_memory() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 42);
 
+        console.load_a_absolute();
+        assert_eq!(42, console.cpu.a);
+    }
+
+    #[test]
+    fn load_a_absolute_sets_negative_flag_if_value_was_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 0xFF);
+
+        console.load_a_absolute();
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_absolute_does_nothing_to_flags_if_value_was_negative_and_flag_was_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xF0;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 0xFF);
+
+        console.load_a_absolute();
+        assert_eq!(0xF0, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_absolute_resets_zero_flag_if_it_was_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xF2;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 0xFF);
+
+        console.load_a_absolute();
+        assert_eq!(0xF0, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_sets_zero_flag_if_value_was_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x20;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 0);
+
+        console.load_a_absolute();
+        assert_eq!(0x22, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_does_nothing_to_flags_if_value_was_zero_and_flag_was_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x2F;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 0);
+
+        console.load_a_absolute();
+        assert_eq!(0x2F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_resets_negative_flag_if_value_was_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xF0;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1, 0);
+
+        console.load_a_absolute();
+        assert_eq!(0x72, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_absolute_sets_wait_counter_correctly() {
+        let mut console = create_test_console();
+        console.load_a_absolute();
+        assert_eq!(4, console.cpu.wait_counter);
+    }
 
     #[test]
     fn clear_decimal_flags_clears_the_flag_and_does_not_touch_other_flags() {

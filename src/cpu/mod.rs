@@ -10,11 +10,12 @@ pub fn get_cpu(tv_system: &TvSystem) -> Cpu {
 pub struct Cpu {
     pub frequency: Frequency,
     pub program_counter:u16,
+    pub stack_pointer:u8,
     pub wait_counter: u8, // used by instructions that take more than 1 cycle to complete
     pub status_flags:u8,
+    pub a: u8,
     pub x: u8,
     pub y: u8,
-    pub a: u8,
 }
 
 impl Cpu {
@@ -22,6 +23,7 @@ impl Cpu {
         Cpu {
             frequency: Frequency::new(&tv_system),
             program_counter: 0,
+            stack_pointer: 0,
             status_flags: 0x34, // unused 4 and 5 bits to 1; interrupt flag at 2 bit to 1
             wait_counter: 0,
             a: 0,
