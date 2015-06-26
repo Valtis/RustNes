@@ -95,6 +95,7 @@ impl Console {
             176 => self.branch_if_carry_set(),
             216 => self.clear_decimal_flag(),
             234 =>  self.no_operation(),
+            240 => self.branch_if_equal(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.cpu.program_counter - 1, self.cpu),
         }
@@ -255,6 +256,11 @@ impl Console {
 
     fn no_operation(&mut self) {
         self.cpu.wait_counter = 2;
+    }
+
+    fn branch_if_equal(&mut self) {
+        let condition = self.cpu.status_flags & 0x02 != 0; 
+        self.do_relative_jump_if(condition);
     }
 }
 
@@ -1092,5 +1098,55 @@ mod tests {
         let mut console = create_test_console();
         console.no_operation();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_equal_branches_if_zero_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD3;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_equal();
+        assert_eq!(0x21 + 0x10, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_equal_does_not_branch_and_updates_pc_correctly_if_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_equal();
+        assert_eq!(0x21, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_equal_takes_2_cycles_if_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_equal();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_equal_takes_3_cycles_if_branching_to_same_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x06;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_equal();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_equal_takes_5_cycles_if_branching_to_different_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x07;
+        console.cpu.program_counter = 0xEF;
+        console.memory.write(0xEF, 0x7F);
+        console.branch_if_equal();
+        assert_eq!(5, console.cpu.wait_counter);
     }
 }
