@@ -30,7 +30,6 @@ impl Console {
         println!("Cycle time in nanoseconds: {}", cycle_time_in_nanoseconds);
 
         let mut cycles = 0;
-        let mut time = time::precise_time_ns();
         let max_cycles = (self.cpu.frequency.cpu_clock_frequency*1000_000.0) as u32;
         let cpu_cycles_per_frame = 100;
 
@@ -40,6 +39,7 @@ impl Console {
 
         println!("\nPC: {}\n", self.cpu.program_counter);
 
+        let mut time = time::precise_time_ns();
         loop {
             let current_time = time::precise_time_ns();
             let time_taken = current_time - time;
@@ -80,6 +80,7 @@ impl Console {
 
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
+            16 => { self.branch_if_positive(); }
             76 => { self.jump_absolute(); }
             120 => { self.set_interrupt_disable_flag(); }
             154 => { self.transfer_x_to_stack_pointer(); }
@@ -118,6 +119,40 @@ impl Console {
         let byte = self.memory.read(self.cpu.program_counter);
         self.cpu.program_counter += 1;
         byte
+    }
+
+    fn branch_if_positive(&mut self) {
+        // in relative mode, offset is a signed 8 bit integer. This needs to be removed from
+        // instruction stream even if we do not jump.
+        let offset = self.get_byte_operand() as i8;
+
+        // check if negative flag is zero and if so, branch
+        if self.cpu.status_flags & 0x80 == 0 {
+            let old_program_counter = self.cpu.program_counter;
+            let mut signed_counter = self.cpu.program_counter as i32;
+            signed_counter += offset as i32;
+
+            // I'm not entirely sure how this should be handled - should the address just wrap around?
+            // Panicing for now - if this turns out to be wrong, it can be fixed later on.
+            if signed_counter < 0 {
+                panic!("Negative program counter value after adding relative offset in branch_if_positive: {}", signed_counter);
+            } else if signed_counter > 0xffff {
+                panic!("Program counter overflow")
+            }
+
+            self.cpu.program_counter = signed_counter as u16;
+
+            // timing depends on whether new address is on same or different memory page
+            let page_size = 256;
+            if old_program_counter / page_size != self.cpu.program_counter / page_size {
+                self.cpu.wait_counter = 5;
+            } else {
+                self.cpu.wait_counter = 3;
+            }
+
+        } else {
+            self.cpu.wait_counter = 2;
+        }
     }
 
     fn jump_absolute(&mut self) {
@@ -262,6 +297,128 @@ mod tests {
     }
 
     #[test]
+    fn branch_if_positive_jumps_to_relative_address_on_nonzero_positive_number() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0x6C);
+        console.set_negative_flag(0x32);
+        console.branch_if_positive();
+        assert_eq!(25 + 0x6C, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_can_jump_backwards() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0xFC);
+        console.set_negative_flag(0x32);
+        console.branch_if_positive();
+        assert_eq!(25 - 4, console.cpu.program_counter);
+    }
+    #[test]
+    fn branch_if_positive_jumps_to_address_on_zero() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0x02);
+        console.set_negative_flag(0x00);
+        console.branch_if_positive();
+
+        assert_eq!(25 + 0x02, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_does_not_jump_on_negative_number() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0xBC);
+        console.set_negative_flag(0xff);
+        console.branch_if_positive();
+        assert_eq!(25, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_does_not_change_flags_if_negative_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0xBC);
+        console.set_negative_flag(0xff);
+        let flags = console.cpu.status_flags;
+        console.branch_if_positive();
+        assert_eq!(flags, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn branch_if_positive_does_not_change_flags_if_negative_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0x0C);
+        console.set_negative_flag(0x00);
+        let flags = console.cpu.status_flags;
+        console.branch_if_positive();
+        assert_eq!(flags, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn branch_if_positive_waits_two_cycles_if_negative_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 24;
+        console.memory.write(24, 0xBC);
+        console.set_negative_flag(0xFF);
+        console.branch_if_positive();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+    #[test]
+    fn branch_if_positive_waits_three_cycles_if_value_is_positive_and_on_same_page() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x030;
+        console.memory.write(0x030, 0x005);
+        console.set_negative_flag(0x00);
+        console.branch_if_positive();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_waits_five_cycles_if_value_is_positive_and_on_previous_page() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 540;
+        console.memory.write(540, 0x80);
+        console.set_negative_flag(0x00);
+        console.branch_if_positive();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_waits_five_cycles_if_value_is_positive_and_barely_on_previous_page() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 512;
+        console.memory.write(512, 0xfe);
+        console.set_negative_flag(0x00);
+        console.branch_if_positive();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_waits_five_cycles_if_value_is_positive_and_barely_on_next_page() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x0FE;
+        console.memory.write(0x0FE, 0x01);
+        console.set_negative_flag(0x00);
+        console.branch_if_positive();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_positive_waits_five_cycles_if_value_is_positive_and_on_next_page() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0xF0;
+        console.memory.write(0xF0, 0x7F);
+        console.set_negative_flag(0x00);
+        console.branch_if_positive();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+
+    #[test]
     fn jump_absolute_sets_program_counter_to_new_value() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0;
@@ -272,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn jump_absoulte_sets_wait_counter_correctly() {
+    fn jump_absolute_sets_wait_counter_correctly() {
         let mut console = create_test_console();
 
         console.jump_absolute();
