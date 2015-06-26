@@ -86,6 +86,7 @@ impl Console {
             56 => self.set_carry_flag(),
             76 => self.jump_absolute(),
             120 => self.set_interrupt_disable_flag(),
+            133 => self.store_a_zero_page(),
             134 => self.store_x_zero_page(),
             144 => self.branch_if_carry_clear(),
             154 => self.transfer_x_to_stack_pointer(),
@@ -141,6 +142,11 @@ impl Console {
         value
     }
 
+    fn do_zero_page_store(&mut self, value: u8) {
+        self.cpu.wait_counter = 3;
+        let address = self.get_byte_operand();
+        self.memory.write(address as u16, value);
+    }
     fn push_value_into_stack(&mut self, value: u8) {
         self.memory.write(0x0100 + self.cpu.stack_pointer as u16, value);
         self.cpu.stack_pointer -= 1;
@@ -210,10 +216,14 @@ impl Console {
         self.cpu.status_flags = self.cpu.status_flags | 0x04; // set second bit
     }
 
+    fn store_a_zero_page(&mut self) {
+        let value = self.cpu.a;
+        self.do_zero_page_store(value);
+    }
+
     fn store_x_zero_page(&mut self) {
-        self.cpu.wait_counter = 3;
-        let address = self.get_byte_operand();
-        self.memory.write(address as u16, self.cpu.x);
+        let value = self.cpu.x;
+        self.do_zero_page_store(value);
     }
 
     fn branch_if_carry_clear(&mut self) {
@@ -232,7 +242,6 @@ impl Console {
 
     fn load_a_immediate(&mut self) {
         self.cpu.a = self.do_immediate_load();
-
     }
 
     fn load_a_absolute(&mut self) {
@@ -714,6 +723,40 @@ mod tests {
         console.memory.write(0xEF, 0x7F);
         console.branch_if_carry_clear();
         assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn store_a_zero_page_stores_value_into_memory_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x2f;
+        console.cpu.program_counter = 0x32;
+        console.memory.write(0x32, 0x14);
+        console.store_a_zero_page();
+        assert_eq!(0x2f, console.memory.read(0x14));
+    }
+
+    #[test]
+    fn store_a_zero_page_does_not_affect_flags() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x2f;
+        console.cpu.program_counter = 0x32;
+        console.memory.write(0x32, 0x14);
+        console.cpu.status_flags = 0xE0;
+        console.store_a_zero_page();
+        assert_eq!(0xE0, console.cpu.status_flags);
+    }
+    #[test]
+    fn store_a_zero_page_increments_pc_correctly() {
+        let mut console = create_test_console();
+        console.store_a_zero_page();
+        assert_eq!(1, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn store_a_zero_page_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.store_a_zero_page();
+        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]
