@@ -40,6 +40,8 @@ impl Console {
 
         // FOR NES CPU TEST
         self.cpu.program_counter = 0xC000;
+        self.cpu.stack_pointer = 0xFF;
+
         println!("\nPC: {}\n", self.cpu.program_counter);
 
         let mut time = time::precise_time_ns();
@@ -88,6 +90,7 @@ impl Console {
             162 => { self.load_x_immediate(); }
             173 => { self.load_a_absolute(); }
             216 => { self.clear_decimal_flag(); }
+            234 => { self.no_operation(); }
             _ => panic!("Invalid opcode {} (PC: {})", instruction, self.cpu.program_counter - 1),
         }
     }
@@ -215,6 +218,9 @@ impl Console {
         self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear third bit
     }
 
+    fn no_operation(&mut self) {
+        self.cpu.wait_counter = 2;
+    }
 }
 
 
@@ -808,6 +814,12 @@ mod tests {
     fn clear_decimal_flags_sets_wait_counter_correctly() {
         let mut console = create_test_console();
         console.clear_decimal_flag();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+    #[test]
+    fn no_operation_waits_2_cycles() {
+        let mut console = create_test_console();
+        console.no_operation();
         assert_eq!(2, console.cpu.wait_counter);
     }
 }
