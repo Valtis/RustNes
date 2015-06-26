@@ -93,6 +93,7 @@ impl Console {
             169 => self.load_a_immediate(),
             173 => self.load_a_absolute(),
             176 => self.branch_if_carry_set(),
+            208 => self.branch_if_not_equal(),
             216 => self.clear_decimal_flag(),
             234 =>  self.no_operation(),
             240 => self.branch_if_equal(),
@@ -249,6 +250,11 @@ impl Console {
         self.do_relative_jump_if(condition);
     }
 
+    fn branch_if_not_equal(&mut self) {
+        let condition = self.cpu.status_flags & 0x02 == 0;
+        self.do_relative_jump_if(condition);
+    }
+
     fn clear_decimal_flag(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear third bit
@@ -259,7 +265,7 @@ impl Console {
     }
 
     fn branch_if_equal(&mut self) {
-        let condition = self.cpu.status_flags & 0x02 != 0; 
+        let condition = self.cpu.status_flags & 0x02 != 0;
         self.do_relative_jump_if(condition);
     }
 }
@@ -1020,21 +1026,6 @@ mod tests {
         assert_eq!(4, console.cpu.wait_counter);
     }
 
-    #[test]
-    fn clear_decimal_flags_clears_the_flag_and_does_not_touch_other_flags() {
-        let mut console = create_test_console();
-        console.cpu.status_flags = 0xCF;
-        console.clear_decimal_flag();
-        assert_eq!(0xC7, console.cpu.status_flags);
-    }
-
-    #[test]
-    fn clear_decimal_flags_does_nothing_if_flag_is_already_cleared() {
-        let mut console = create_test_console();
-        console.cpu.status_flags = 0xD6;
-        console.clear_decimal_flag();
-        assert_eq!(0xD6, console.cpu.status_flags);
-    }
 
     #[test]
     fn branch_if_carry_set_branches_if_flag_is_set() {
@@ -1085,6 +1076,72 @@ mod tests {
         console.memory.write(0xEF, 0x7F);
         console.branch_if_carry_set();
         assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_not_equal_branches_if_zero_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD4;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_not_equal();
+        assert_eq!(0x21 + 0x10, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_not_equal_does_not_branch_and_updates_pc_correctly_if_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x03;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_not_equal();
+        assert_eq!(0x21, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_not_equal_takes_2_cycles_if_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x02;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_not_equal();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_not_equal_takes_3_cycles_if_branching_to_same_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x01;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_not_equal();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_not_equal_takes_5_cycles_if_branching_to_different_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0xEF;
+        console.memory.write(0xEF, 0x7F);
+        console.branch_if_not_equal();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn clear_decimal_flags_clears_the_flag_and_does_not_touch_other_flags() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xCF;
+        console.clear_decimal_flag();
+        assert_eq!(0xC7, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_decimal_flags_does_nothing_if_flag_is_already_cleared() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD6;
+        console.clear_decimal_flag();
+        assert_eq!(0xD6, console.cpu.status_flags);
     }
 
     #[test]
