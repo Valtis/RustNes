@@ -80,6 +80,7 @@ impl Console {
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
             16 => { self.branch_if_positive(); }
+            32 => { self.jump_to_subroutine();}
             76 => { self.jump_absolute(); }
             120 => { self.set_interrupt_disable_flag(); }
             134 => { self.store_x_zero_page(); }
@@ -120,6 +121,16 @@ impl Console {
         byte
     }
 
+    fn push_value_into_stack(&mut self, value: u8) {
+        self.memory.write(0x0100 + self.cpu.stack_pointer as u16, value);
+        self.cpu.stack_pointer -= 1;
+    }
+
+    fn pop_value_from_stack(&mut self) -> u8 {
+        self.cpu.stack_pointer += 1;
+        self.memory.read(0x0100 + self.cpu.stack_pointer as u16)
+    }
+
     fn branch_if_positive(&mut self) {
 
         // This needs to be removed from instruction stream even if we do not jump.
@@ -147,6 +158,16 @@ impl Console {
         } else {
             self.cpu.wait_counter = 2;
         }
+    }
+
+    fn jump_to_subroutine(&mut self) {
+        self.cpu.wait_counter = 6;
+        let address = self.get_2_byte_operand();
+
+        let return_address = self.cpu.program_counter - 1;
+        self.push_value_into_stack(((return_address & 0xFF00) >> 8) as u8);
+        self.push_value_into_stack((return_address & 0xFF) as u8);
+        self.cpu.program_counter = address;
     }
 
     fn jump_absolute(&mut self) {
@@ -297,6 +318,38 @@ mod tests {
     }
 
     #[test]
+    fn push_value_to_stack_pushes_value_into_stack() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0xFF;
+        console.push_value_into_stack(23);
+        assert_eq!(23, console.memory.read(0x01FF));
+    }
+
+    #[test]
+    fn push_value_to_stack_updates_stack_pointer() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0xFF;
+        console.push_value_into_stack(23);
+        assert_eq!(0xFE, console.cpu.stack_pointer);
+    }
+
+    #[test]
+    fn pop_value_from_stack_returns_correct_value() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0xCC;
+        console.memory.write(0x0100 + 0xCD, 123);
+        assert_eq!(123, console.pop_value_from_stack());
+    }
+
+    #[test]
+    fn pop_value_from_stack_updates_stack_pointer() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0xCC;
+        console.pop_value_from_stack();
+        assert_eq!(0xCD, console.cpu.stack_pointer);
+    }
+
+    #[test]
     fn branch_if_positive_jumps_to_relative_address_on_nonzero_positive_number() {
         let mut console = create_test_console();
         console.cpu.program_counter = 24;
@@ -417,6 +470,49 @@ mod tests {
         assert_eq!(5, console.cpu.wait_counter);
     }
 
+    #[test]
+    fn jump_to_subroutine_pushes_return_address_into_stack() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0xABCD;
+        console.cpu.stack_pointer = 0xFF;
+        console.memory.write(0xABCD, 0x09);
+        console.memory.write(0xABCD + 1, 0xFC);
+        console.jump_to_subroutine();
+        // return address - 1 is pushed into stack in little endian form.
+        // in this case, it's 0xABCE as the instruction takes two values from the instruction stream
+        assert_eq!(0xCE, console.pop_value_from_stack());
+        assert_eq!(0xAB, console.pop_value_from_stack());
+    }
+
+    #[test]
+    fn jump_to_subroutine_changes_program_counter_value() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0xABCD;
+        console.cpu.stack_pointer = 0xFF;
+        console.memory.write(0xABCD, 0x09);
+        console.memory.write(0xABCD + 1, 0xFC);
+        console.jump_to_subroutine();
+        assert_eq!(0xFC09, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn jump_to_subroutine_does_not_affect_status_flags() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 15;
+        console.cpu.stack_pointer = 0xFF;
+        console.cpu.status_flags = 0xAD;
+        console.jump_to_subroutine();
+        assert_eq!(0xAD, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn jump_to_subroutine_takes_6_cycles() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 15;
+        console.cpu.stack_pointer = 0xFF;
+        console.jump_to_subroutine();
+        assert_eq!(6, console.cpu.wait_counter);
+    }
 
     #[test]
     fn jump_absolute_sets_program_counter_to_new_value() {
