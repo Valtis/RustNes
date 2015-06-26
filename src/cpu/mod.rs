@@ -23,7 +23,7 @@ impl Cpu {
         Cpu {
             frequency: Frequency::new(&tv_system),
             program_counter: 0,
-            stack_pointer: $FD,
+            stack_pointer: 0xFD,
             status_flags: 0x34, // unused 4 and 5 bits to 1; interrupt flag at 2 bit to 1
             wait_counter: 0,
             a: 0,

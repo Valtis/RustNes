@@ -81,6 +81,7 @@ impl Console {
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
             16 => { self.branch_if_positive(); }
+            24 => { self.clear_carry_flag(); }
             32 => { self.jump_to_subroutine();}
             56 => { self.set_carry_flag(); }
             76 => { self.jump_absolute(); }
@@ -166,6 +167,11 @@ impl Console {
         } else {
             self.cpu.wait_counter = 2;
         }
+    }
+
+    fn clear_carry_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags & 0xFE; // clear bi 0
     }
 
     fn jump_to_subroutine(&mut self) {
@@ -490,6 +496,29 @@ mod tests {
         console.set_negative_flag(0x00);
         console.branch_if_positive();
         assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn clear_carry_flag_clears_the_flag_if_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xC5;
+        console.clear_carry_flag();
+        assert_eq!(0xC4, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_carry_does_nothing_if_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xD6;
+        console.clear_carry_flag();
+        assert_eq!(0xD6, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_carry_flag_takes_2_cycles() {
+        let mut console = create_test_console();
+        console.clear_carry_flag();
+        assert_eq!(2, console.cpu.wait_counter);
     }
 
     #[test]
