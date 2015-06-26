@@ -37,6 +37,9 @@ impl Console {
         self.cpu.program_counter = 0xFFFC;
         self.jump_absolute();
 
+
+        // FOR NES CPU TEST
+        self.cpu.program_counter = 0xC000;
         println!("\nPC: {}\n", self.cpu.program_counter);
 
         let mut time = time::precise_time_ns();
@@ -79,13 +82,13 @@ impl Console {
             16 => { self.branch_if_positive(); }
             76 => { self.jump_absolute(); }
             120 => { self.set_interrupt_disable_flag(); }
+            134 => { self.store_x_zero_page(); }
             154 => { self.transfer_x_to_stack_pointer(); }
             162 => { self.load_x_immediate(); }
             173 => { self.load_a_absolute(); }
             216 => { self.clear_decimal_flag(); }
             _ => panic!("Invalid opcode {} (PC: {})", instruction, self.cpu.program_counter - 1),
         }
-
     }
 
     fn set_negative_flag(&mut self, value: u8) {
@@ -119,8 +122,8 @@ impl Console {
 
     fn branch_if_positive(&mut self) {
 
-        //  This needs to be removed from
-        // instruction stream even if we do not jump.
+        // This needs to be removed from instruction stream even if we do not jump.
+        // Get the value as u16 as pc is u16.
         let offset = self.get_byte_operand() as u16;
 
         // check if negative flag is zero and if so, branch
@@ -141,7 +144,6 @@ impl Console {
             } else {
                 self.cpu.wait_counter = 5;
             }
-
         } else {
             self.cpu.wait_counter = 2;
         }
@@ -155,6 +157,12 @@ impl Console {
     fn set_interrupt_disable_flag(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.status_flags = self.cpu.status_flags | 0x04; // set second bit
+    }
+
+    fn store_x_zero_page(&mut self) {
+        self.cpu.wait_counter = 3;
+        let address = self.get_byte_operand();
+        self.memory.write(address as u16, self.cpu.x);
     }
 
     fn transfer_x_to_stack_pointer(&mut self) {
@@ -450,6 +458,39 @@ mod tests {
         let mut console = create_test_console();
         console.set_interrupt_disable_flag();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn store_x_zero_page_stores_value_into_memory_correctly() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x2f;
+        console.cpu.program_counter = 0x32;
+        console.memory.write(0x32, 0x14);
+        console.store_x_zero_page();
+        assert_eq!(0x2f, console.memory.read(0x14));
+    }
+
+    #[test]
+    fn store_x_zero_page_does_not_affect_flags() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x2f;
+        console.cpu.program_counter = 0x32;
+        console.memory.write(0x32, 0x14);
+        console.cpu.status_flags = 0xE0;
+        console.store_x_zero_page();
+        assert_eq!(0xE0, console.cpu.status_flags);
+    }
+    #[test]
+    fn store_x_zero_page_increments_pc_correctly() {
+        let mut console = create_test_console();
+        console.store_x_zero_page();
+        assert_eq!(1, console.cpu.program_counter);
+    }
+    #[test]
+    fn store_x_zero_page_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.store_x_zero_page();
+        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]

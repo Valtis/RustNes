@@ -111,10 +111,10 @@ pub enum ArrangementMirroring {
 
 #[derive(Debug)]
 pub struct RomHeader {
-    prg_rom_size:u8, // size in 16kb units
-    chr_rom_size:u8, // size in 8kb units - if 0, chr ram is used
-    prg_ram_size:u8, // size in 8kb units - if 0, 8kb of ram is assumed
-    mapper: u8,
+    pub prg_rom_size:u8, // size in 16kb units
+    pub chr_rom_size:u8, // size in 8kb units - if 0, chr ram is used
+    pub prg_ram_size:u8, // size in 8kb units - if 0, 8kb of ram is assumed
+    pub mapper: u8,
     arrangement_mirroring: ArrangementMirroring,
     pub tv_system: TvSystem,
     has_trainer: bool,
