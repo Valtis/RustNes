@@ -83,6 +83,7 @@ impl Console {
         match instruction {
             16 => { self.branch_if_positive(); }
             32 => { self.jump_to_subroutine();}
+            56 => { self.set_carry_flag(); }
             76 => { self.jump_absolute(); }
             120 => { self.set_interrupt_disable_flag(); }
             134 => { self.store_x_zero_page(); }
@@ -171,6 +172,11 @@ impl Console {
         self.push_value_into_stack(((return_address & 0xFF00) >> 8) as u8);
         self.push_value_into_stack((return_address & 0xFF) as u8);
         self.cpu.program_counter = address;
+    }
+
+    fn set_carry_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags | 0x01;
     }
 
     fn jump_absolute(&mut self) {
@@ -518,6 +524,42 @@ mod tests {
         console.cpu.stack_pointer = 0xFF;
         console.jump_to_subroutine();
         assert_eq!(6, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn set_carry_flag_sets_the_flag_if_it_was_not_set_before() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 15;
+        console.cpu.status_flags = 0x86;
+        console.set_carry_flag();
+        assert_eq!(0x87, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_carry_flag_does_nothing_if_flag_is_already_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 15;
+        console.cpu.status_flags = 0x86;
+        console.set_carry_flag();
+        assert_eq!(0x87, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_carry_flag_does_not_modify_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 15;
+        console.cpu.stack_pointer = 0x86;
+        console.set_carry_flag();
+        assert_eq!(15, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn set_carry_flag_takes_2_cycles() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 15;
+        console.cpu.stack_pointer = 0xFF;
+        console.set_carry_flag();
+        assert_eq!(2, console.cpu.wait_counter);
     }
 
     #[test]
