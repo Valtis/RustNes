@@ -87,6 +87,7 @@ impl Console {
             76 => { self.jump_absolute(); }
             120 => { self.set_interrupt_disable_flag(); }
             134 => { self.store_x_zero_page(); }
+            144 => { self.branch_if_carry_clear(); }
             154 => { self.transfer_x_to_stack_pointer(); }
             162 => { self.load_x_immediate(); }
             173 => { self.load_a_absolute(); }
@@ -137,36 +138,33 @@ impl Console {
         self.memory.read(0x0100 + self.cpu.stack_pointer as u16)
     }
 
-    fn do_relative_jump(&mut self, offset: u16) {
-        let old_program_counter = self.cpu.program_counter;
+    fn do_relative_jump_if(&mut self, condition: bool) {
+        let offset = self.get_byte_operand() as u16;
+        if  condition {
+            let old_program_counter = self.cpu.program_counter;
 
-        self.cpu.program_counter += offset;
+            self.cpu.program_counter += offset;
 
-        // the offset is signed 8 bit integer in two's complement. Thus if bit 7 is set,
-        // we need to subtract 0x100 from the counter to get the correct value
-        if offset & 0x80 != 0 {
-            self.cpu.program_counter -= 0x100;
-        }
+            // the offset is signed 8 bit integer in two's complement. Thus if bit 7 is set,
+            // we need to subtract 0x100 from the counter to get the correct value
+            if offset & 0x80 != 0 {
+                self.cpu.program_counter -= 0x100;
+            }
 
-        // timing depends on whether new address is on same or different memory page
-        if old_program_counter & 0xFF00 == self.cpu.program_counter & 0xFF00 {
-            self.cpu.wait_counter = 3;
+            // timing depends on whether new address is on same or different memory page
+            if old_program_counter & 0xFF00 == self.cpu.program_counter & 0xFF00 {
+                self.cpu.wait_counter = 3;
+            } else {
+                self.cpu.wait_counter = 5;
+            }
         } else {
-            self.cpu.wait_counter = 5;
+            self.cpu.wait_counter = 2;
         }
     }
 
     fn branch_if_positive(&mut self) {
-        // This needs to be removed from instruction stream even if we do not jump.
-        // Get the value as u16 as pc is u16.
-        let offset = self.get_byte_operand() as u16;
-
-        // check if negative flag is zero and if so, branch
-        if self.cpu.status_flags & 0x80 == 0 {
-            self.do_relative_jump(offset);
-        } else {
-            self.cpu.wait_counter = 2;
-        }
+        let condition = self.cpu.status_flags & 0x80 == 0;
+        self.do_relative_jump_if(condition);
     }
 
     fn clear_carry_flag(&mut self) {
@@ -205,6 +203,11 @@ impl Console {
         self.memory.write(address as u16, self.cpu.x);
     }
 
+    fn branch_if_carry_clear(&mut self) {
+        let condition = self.cpu.status_flags & 0x01 == 0;
+        self.do_relative_jump_if(condition);
+    }
+
     fn transfer_x_to_stack_pointer(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.stack_pointer = self.cpu.x;
@@ -230,12 +233,8 @@ impl Console {
     }
 
     fn branch_if_carry_set(&mut self) {
-        let offset = self.get_byte_operand() as u16;
-        if self.cpu.status_flags & 0x01 != 0 {
-            self.do_relative_jump(offset);
-        } else {
-            self.cpu.wait_counter = 2;
-        }
+        let condition = self.cpu.status_flags & 0x01 != 0;
+        self.do_relative_jump_if(condition);
     }
 
     fn clear_decimal_flag(&mut self) {
@@ -641,6 +640,57 @@ mod tests {
         let mut console = create_test_console();
         console.set_interrupt_disable_flag();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_carry_clear_branches_if_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x80;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_carry_clear();
+        // 0x21 as the instruction reads the offset, thus modifying the pc
+        assert_eq!(0x21 + 0x10, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_carry_clear_does_not_branch_and_updates_pc_correctly_if_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x43;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_carry_clear();
+        assert_eq!(0x21, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_carry_clear_takes_2_cycles_if_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xB9;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_carry_clear();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_carry_clear_takes_3_cycles_if_branching_to_same_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_carry_clear();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_carry_clear_takes_5_cycles_if_branching_to_different_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xB6;
+        console.cpu.program_counter = 0xEF;
+        console.memory.write(0xEF, 0x7F);
+        console.branch_if_carry_clear();
+        assert_eq!(5, console.cpu.wait_counter);
     }
 
     #[test]
