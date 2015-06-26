@@ -51,19 +51,15 @@ impl Console {
 
             if time_taken > cycle_time_in_nanoseconds * cpu_cycles_per_frame {
                 avg_cycle += time_taken as f64;
-
                 for _ in 0..cpu_cycles_per_frame {
-
                     // ensure instruction timing
                     if self.cpu.wait_counter > 0 {
                         self.cpu.wait_counter -= 1;
-                        continue;
+                    } else {
+                        let instruction = self.memory.read(self.cpu.program_counter);
+                        self.cpu.program_counter += 1;
+                        self.execute_instruction(instruction);
                     }
-
-                    let instruction = self.memory.read(self.cpu.program_counter);
-                    self.cpu.program_counter += 1;
-                    self.execute_instruction(instruction);
-
                     cycles += 1;
                 }
 
@@ -122,32 +118,28 @@ impl Console {
     }
 
     fn branch_if_positive(&mut self) {
-        // in relative mode, offset is a signed 8 bit integer. This needs to be removed from
+
+        //  This needs to be removed from
         // instruction stream even if we do not jump.
-        let offset = self.get_byte_operand() as i8;
+        let offset = self.get_byte_operand() as u16;
 
         // check if negative flag is zero and if so, branch
         if self.cpu.status_flags & 0x80 == 0 {
             let old_program_counter = self.cpu.program_counter;
-            let mut signed_counter = self.cpu.program_counter as i32;
-            signed_counter += offset as i32;
 
-            // I'm not entirely sure how this should be handled - should the address just wrap around?
-            // Panicing for now - if this turns out to be wrong, it can be fixed later on.
-            if signed_counter < 0 {
-                panic!("Negative program counter value after adding relative offset in branch_if_positive: {}", signed_counter);
-            } else if signed_counter > 0xffff {
-                panic!("Program counter overflow")
+            self.cpu.program_counter += offset;
+
+            // the offset is signed 8 bit integer in two's complement. Thus if bit 7 is set,
+            // we need to subtract 0x100 from the counter to get the correct value
+            if offset & 0x80 != 0 {
+                self.cpu.program_counter -= 0x100;
             }
 
-            self.cpu.program_counter = signed_counter as u16;
-
             // timing depends on whether new address is on same or different memory page
-            let page_size = 256;
-            if old_program_counter / page_size != self.cpu.program_counter / page_size {
-                self.cpu.wait_counter = 5;
-            } else {
+            if old_program_counter & 0xFF00 == self.cpu.program_counter & 0xFF00 {
                 self.cpu.wait_counter = 3;
+            } else {
+                self.cpu.wait_counter = 5;
             }
 
         } else {
