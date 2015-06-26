@@ -80,21 +80,22 @@ impl Console {
 
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
-            16 => { self.branch_if_positive(); }
-            24 => { self.clear_carry_flag(); }
-            32 => { self.jump_to_subroutine();}
-            56 => { self.set_carry_flag(); }
-            76 => { self.jump_absolute(); }
-            120 => { self.set_interrupt_disable_flag(); }
-            134 => { self.store_x_zero_page(); }
-            144 => { self.branch_if_carry_clear(); }
-            154 => { self.transfer_x_to_stack_pointer(); }
-            162 => { self.load_x_immediate(); }
-            173 => { self.load_a_absolute(); }
-            176 => { self.branch_if_carry_set(); }
-            216 => { self.clear_decimal_flag(); }
-            234 => { self.no_operation(); }
-            _ => panic!("\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
+            16 => self.branch_if_positive(),
+            24 => self.clear_carry_flag(),
+            32 => self.jump_to_subroutine(),
+            56 => self.set_carry_flag(),
+            76 => self.jump_absolute(),
+            120 => self.set_interrupt_disable_flag(),
+            134 => self.store_x_zero_page(),
+            144 => self.branch_if_carry_clear(),
+            154 => self.transfer_x_to_stack_pointer(),
+            162 => self.load_x_immediate(),
+            169 => self.load_a_immediate(),
+            173 => self.load_a_absolute(),
+            176 => self.branch_if_carry_set(),
+            216 => self.clear_decimal_flag(),
+            234 =>  self.no_operation(),
+            _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.cpu.program_counter - 1, self.cpu),
         }
     }
@@ -122,10 +123,20 @@ impl Console {
          ((high_byte as u16) << 8) | low_byte as u16
     }
 
+
     fn get_byte_operand(&mut self) -> u8 {
         let byte = self.memory.read(self.cpu.program_counter);
         self.cpu.program_counter += 1;
         byte
+    }
+
+    fn do_immediate_load(&mut self) -> u8 {
+        self.cpu.wait_counter = 2;
+
+        let value = self.get_byte_operand();
+        self.set_negative_flag(value);
+        self.set_zero_flag(value);
+        value
     }
 
     fn push_value_into_stack(&mut self, value: u8) {
@@ -214,12 +225,12 @@ impl Console {
     }
 
     fn load_x_immediate(&mut self) {
-        self.cpu.wait_counter = 2;
-        let operand = self.get_byte_operand();
-        self.cpu.x = operand;
+        self.cpu.x = self.do_immediate_load();
+    }
 
-        self.set_negative_flag(operand);
-        self.set_zero_flag(operand);
+    fn load_a_immediate(&mut self) {
+        self.cpu.a = self.do_immediate_load();
+
     }
 
     fn load_a_absolute(&mut self) {
@@ -827,6 +838,84 @@ mod tests {
         console.load_x_immediate();
         assert_eq!(2, console.cpu.wait_counter);
     }
+
+    fn load_a_immediate_sets_a_to_the_value_given_in_next_byte() {
+        let mut console = create_test_console();
+
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0x23);
+        console.load_a_immediate();
+        assert_eq!(0x23, console.cpu.a);
+    }
+
+    #[test]
+    fn load_a_immediate_sets_negative_flag_and_does_not_touch_other_flags_if_value_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x4C;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.load_a_immediate();
+        assert_eq!(0xCC, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_immediate_sets_zero_flag_and_does_not_touch_other_flags_if_value_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x4C;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0);
+        console.load_a_immediate();
+        assert_eq!(0x4E, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_immediate_resets_zero_flag_when_value_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x72;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.load_a_immediate();
+        assert_eq!(0xF0, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_immediate_resets_negative_flag_when_value_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xFC;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0);
+        console.load_a_immediate();
+        assert_eq!(0x7E, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_immediate_does_nothing_to_flags_with_negative_value_if_negative_flag_was_set_before() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xFC;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.load_a_immediate();
+        assert_eq!(0xFC, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn load_a_immediate_does_nothing_to_flags_with_zero_value_if_zero_flag_was_set_before() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x43;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0);
+        console.load_a_immediate();
+        assert_eq!(0x43, console.cpu.status_flags);
+    }
+
+
+    #[test]
+    fn load_a_immediate_sets_wait_counter_correctly() {
+        let mut console = create_test_console();
+        console.load_a_immediate();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
 
     #[test]
     fn load_a_absolute_loads_correct_value_from_memory() {
