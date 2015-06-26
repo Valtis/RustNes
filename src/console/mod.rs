@@ -40,7 +40,6 @@ impl Console {
 
         // FOR NES CPU TEST
         self.cpu.program_counter = 0xC000;
-        self.cpu.stack_pointer = 0xFF;
 
         println!("\nPC: {}\n", self.cpu.program_counter);
 
@@ -93,7 +92,8 @@ impl Console {
             176 => { self.branch_if_carry_set(); }
             216 => { self.clear_decimal_flag(); }
             234 => { self.no_operation(); }
-            _ => panic!("Invalid opcode {} (PC: {})", instruction, self.cpu.program_counter - 1),
+            _ => panic!("\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
+                self.cpu.program_counter - 1, self.cpu),
         }
     }
 
