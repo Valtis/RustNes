@@ -86,6 +86,7 @@ impl Console {
             36 => self.bit_test_zero_page(),
             56 => self.set_carry_flag(),
             76 => self.jump_absolute(),
+            80 => self.branch_if_overflow_clear(),
             112 => self.branch_if_overflow_set(),
             120 => self.set_interrupt_disable_flag(),
             133 => self.store_a_zero_page(),
@@ -224,6 +225,11 @@ impl Console {
     fn jump_absolute(&mut self) {
         self.cpu.wait_counter = 3;
         self.cpu.program_counter = self.get_2_byte_operand();
+    }
+
+    fn branch_if_overflow_clear(&mut self) {
+        let condition = self.cpu.status_flags & 0x40 == 0;
+        self.do_relative_jump_if(condition);
     }
 
     fn branch_if_overflow_set(&mut self) {
@@ -855,9 +861,59 @@ mod tests {
         console.jump_absolute();
         assert_eq!(3, console.cpu.wait_counter);
     }
+    #[test]
+    fn branch_if_overflow_clear_branches_if_overflow_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xBF;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_overflow_clear();
+        assert_eq!(0x21 + 0x10, console.cpu.program_counter);
+    }
 
     #[test]
-    fn branch_if_overflow_branches_if_overflow_flag_is_set() {
+    fn branch_if_overflow_clear_does_not_branch_and_updates_pc_correctly_if_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x40;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_overflow_clear();
+        assert_eq!(0x21, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_oveflow_clear_takes_2_cycles_if_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x040;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_overflow_clear();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_overflow_clear_takes_3_cycles_if_branching_to_same_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xBF;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_overflow_clear();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_overflow_clear_takes_5_cycles_if_branching_to_different_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xBF;
+        console.cpu.program_counter = 0xEF;
+        console.memory.write(0xEF, 0x7F);
+        console.branch_if_overflow_clear();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+
+    #[test]
+    fn branch_if_overflow_set_branches_if_overflow_flag_is_set() {
         let mut console = create_test_console();
         console.cpu.status_flags = 0xD0;
         console.cpu.program_counter = 0x20;
