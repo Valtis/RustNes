@@ -85,6 +85,7 @@ impl Console {
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
             36 => self.bit_test_zero_page(),
+            41 => self.and_immediate(),
             56 => self.set_carry_flag(),
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
@@ -223,10 +224,16 @@ impl Console {
         let result = self.cpu.a & operand;
         // set overflow and negative flags to correct values, unset zero flag
         self.cpu.status_flags = (self.cpu.status_flags & 0x3D) | (result & 0xC0);
-        // if result is zero, set zero flag
-        if result == 0 {
-            self.cpu.status_flags = self.cpu.status_flags | 0x02;
-        }
+        self.set_zero_flag(result);
+    }
+
+    fn and_immediate(&mut self) {
+        self.cpu.wait_counter = 2;
+        let operand = self.get_byte_operand();
+        self.cpu.a = self.cpu.a & operand;
+        let result = self.cpu.a;
+        self.set_negative_flag(result);
+        self.set_zero_flag(result);
     }
 
     fn set_carry_flag(&mut self) {
@@ -303,7 +310,6 @@ impl Console {
         self.cpu.a = operand;
         self.set_negative_flag(operand);
         self.set_zero_flag(operand);
-
     }
 
     fn branch_if_carry_set(&mut self) {
@@ -854,11 +860,125 @@ mod tests {
         console.bit_test_zero_page();
         assert_eq!(0x1234+1, console.cpu.program_counter);
     }
+
     #[test]
     fn bit_test_zero_page_takes_3_cycles() {
         let mut console = create_test_console();
         console.bit_test_zero_page();
         assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn and_immediate_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x3E);
+        console.and_immediate();
+        assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn and_immediate_unsets_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.status_flags = 0x02;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x3E);
+        console.and_immediate();
+        assert_eq!(0x00, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_does_nothing_to_zero_flag_if_it_was_not_set_before_and_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x3E);
+        console.and_immediate();
+        assert_eq!(0x00, console.cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn and_immediate_sets_zero_flag_if_result_is_zero_and_flag_was_not_set_before() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x00;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x3E);
+        console.and_immediate();
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_does_nothing_to_zero_flag_if_flag_is_set_and_result_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x00;
+        console.cpu.status_flags = 0x02;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x3E);
+        console.and_immediate();
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_sets_negative_flag_if_result_is_negative_and_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0xFF);
+        console.and_immediate();
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_does_nothing_to_negative_flag_if_it_is_set_and_number_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0xA1;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0xFF);
+        console.and_immediate();
+        assert_eq!(0xA1, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_unsets_negative_flag_if_flag_is_set_and_number_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0xAF;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x7F);
+        console.and_immediate();
+        assert_eq!(0x2F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_does_nothing_to_negative_flag_if_it_is_unset_and_number_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0x3F;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x7F);
+        console.and_immediate();
+        assert_eq!(0x3F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn and_immediate_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.and_immediate();
+        assert_eq!(0x53, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn and_immediate_takes_2_cycles() {
+        let mut console = create_test_console();
+        console.and_immediate();
+        assert_eq!(2, console.cpu.wait_counter);
     }
 
     #[test]
