@@ -87,6 +87,7 @@ impl Console {
             56 => self.set_carry_flag(),
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
+            96 => self.return_from_subroutine(),
             112 => self.branch_if_overflow_set(),
             120 => self.set_interrupt_disable_flag(),
             133 => self.store_a_zero_page(),
@@ -230,6 +231,13 @@ impl Console {
     fn branch_if_overflow_clear(&mut self) {
         let condition = self.cpu.status_flags & 0x40 == 0;
         self.do_relative_jump_if(condition);
+    }
+
+    fn return_from_subroutine(&mut self) {
+        self.cpu.wait_counter = 6;
+        let low_byte = self.pop_value_from_stack() as u16;
+        let high_byte = self.pop_value_from_stack() as u16;
+        self.cpu.program_counter = ((high_byte << 8) | low_byte) + 1;
     }
 
     fn branch_if_overflow_set(&mut self) {
@@ -911,6 +919,40 @@ mod tests {
         assert_eq!(5, console.cpu.wait_counter);
     }
 
+    #[test]
+    fn return_from_subroutine_sets_pc_correctly() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        // push high byte
+        console.push_value_into_stack(0xFA);
+        // push low byte
+        console.push_value_into_stack(0x0B);
+        console.return_from_subroutine();
+        assert_eq!(0xFA0B + 1, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn return_from_subroutine_increments_stack_pointer() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0x10;
+        console.return_from_subroutine();
+        assert_eq!(0x10 + 2, console.cpu.stack_pointer);
+    }
+
+    #[test]
+    fn return_from_subroutine_does_not_touch_status_flags() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xFA;
+        console.return_from_subroutine();
+        assert_eq!(0xFA, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn return_from_subroutine_takes_6_cycles() {
+        let mut console = create_test_console();
+        console.return_from_subroutine();
+        assert_eq!(6, console.cpu.wait_counter);
+    }
 
     #[test]
     fn branch_if_overflow_set_branches_if_overflow_flag_is_set() {
