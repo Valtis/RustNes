@@ -88,6 +88,7 @@ impl Console {
             36 => self.bit_test_zero_page(),
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
+            48 => self.branch_if_minus_set(),
             56 => self.set_carry_flag(),
             72 => self.push_accumulator(),
             76 => self.jump_absolute(),
@@ -243,6 +244,11 @@ impl Console {
         let result = self.cpu.a;
         self.set_negative_flag(result);
         self.set_zero_flag(result);
+    }
+
+    fn branch_if_minus_set(&mut self) {
+        let condition = self.cpu.status_flags & 0x80 != 0;
+        self.do_relative_jump_if(condition);
     }
 
     fn set_carry_flag(&mut self) {
@@ -1049,6 +1055,56 @@ mod tests {
         let mut console = create_test_console();
         console.and_immediate();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_minus_set_branches_if_zero_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x80;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_minus_set();
+        assert_eq!(0x21 + 0x10, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_minus_set_does_not_branch_and_updates_pc_correctly_if_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x7F;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_minus_set();
+        assert_eq!(0x21, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn branch_if_minus_set_takes_2_cycles_if_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x7F;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_minus_set();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_minus_set_takes_3_cycles_if_branching_to_same_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x80;
+        console.cpu.program_counter = 0x20;
+        console.memory.write(0x20, 0x10);
+        console.branch_if_minus_set();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn branch_if_minus_set_takes_5_cycles_if_branching_to_different_page() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x80;
+        console.cpu.program_counter = 0xEF;
+        console.memory.write(0xEF, 0x7F);
+        console.branch_if_minus_set();
+        assert_eq!(5, console.cpu.wait_counter);
     }
 
     #[test]
