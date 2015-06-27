@@ -80,6 +80,7 @@ impl Console {
 
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
+            8 => self.push_status_flags_into_stack(),
             16 => self.branch_if_positive(),
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
@@ -184,6 +185,14 @@ impl Console {
         } else {
             self.cpu.wait_counter = 2;
         }
+    }
+
+    fn push_status_flags_into_stack(&mut self) {
+        // This instruction sets bits 4 & 5 to 1 for the value that gets pushed into stack.
+        // In contrast, irq or nmi will set bit 4 to 0.
+        self.cpu.wait_counter = 3;
+        let flags = self.cpu.status_flags | 0x30;
+        self.push_value_into_stack(flags);
     }
 
     fn branch_if_positive(&mut self) {
@@ -321,7 +330,6 @@ impl Console {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use cpu::get_cpu;
     use memory::Memory;
@@ -446,6 +454,29 @@ mod tests {
         console.cpu.stack_pointer = 0xCC;
         console.pop_value_from_stack();
         assert_eq!(0xCD, console.cpu.stack_pointer);
+    }
+
+    #[test]
+    fn push_status_flags_into_stack_pushes_flags_to_stack_and_sets_bits_4_and_5_to_1() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x8A;
+        console.push_status_flags_into_stack();
+        assert_eq!(0xBA, console.pop_value_from_stack());
+    }
+
+    #[test]
+    fn push_status_flags_into_stack_does_not_increment_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x4000;
+        console.push_status_flags_into_stack();
+        assert_eq!(0x4000, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn push_status_flags_into_stack_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.push_status_flags_into_stack();
+        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]

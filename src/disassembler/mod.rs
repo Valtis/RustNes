@@ -29,9 +29,9 @@ fn write(file: &mut File, iter :&mut Peekable<Iter<u8>>) {
                 0 => { write!(file, "brk").unwrap(); }
                 1 => { write_indirect_x(file, iter, "ora"); }
                 5 => { write_zero_page(file, iter, "ora"); }
-                9 => { write_immediate(file, iter, "ora"); }
                 6 => { write_zero_page(file, iter, "asl"); }
                 8 => { write!(file, "php").unwrap(); }
+                9 => { write_immediate(file, iter, "ora"); }
                 10 => { write!(file, "asl A").unwrap(); }
                 13 => { write_absolute(file, iter, "ora"); }
                 14 => { write_absolute(file, iter, "asl"); }
