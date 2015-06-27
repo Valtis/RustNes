@@ -101,6 +101,7 @@ impl Console {
             169 => self.load_a_immediate(),
             173 => self.load_a_absolute(),
             176 => self.branch_if_carry_set(),
+            201 => self.compare_immediate(),
             208 => self.branch_if_not_equal(),
             216 => self.clear_decimal_flag(),
             234 =>  self.no_operation(),
@@ -315,6 +316,19 @@ impl Console {
     fn branch_if_carry_set(&mut self) {
         let condition = self.cpu.status_flags & 0x01 != 0;
         self.do_relative_jump_if(condition);
+    }
+
+    fn compare_immediate(&mut self) {
+        self.cpu.wait_counter = 2;
+        let operand = self.get_byte_operand();
+        if operand > self.cpu.a {
+            self.cpu.status_flags = self.cpu.status_flags | 0x80;
+        } else if operand == self.cpu.a {
+            self.cpu.status_flags = self.cpu.status_flags | 0x03;
+        } else {
+            self.cpu.status_flags = self.cpu.status_flags | 0x01;
+        }
+
     }
 
     fn branch_if_not_equal(&mut self) {
@@ -1691,6 +1705,66 @@ mod tests {
         console.memory.write(0xEF, 0x7F);
         console.branch_if_carry_set();
         assert_eq!(5, console.cpu.wait_counter);
+    }
+
+     #[test]
+    fn compare_immediate_does_not_modify_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x40;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0x20);
+        console.compare_immediate();
+        assert_eq!(0x40, console.cpu.a);
+    }
+
+
+    #[test]
+    fn compare_immediate_sets_carry_flag_if_accumulator_is_greater_than_operand() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x40;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0x20);
+        console.compare_immediate();
+        assert_eq!(0x01, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_immediate_sets_carry_and_zero_flags_if_accumulator_is_equal_operand() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x40;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0x40);
+        console.compare_immediate();
+        assert_eq!(0x03, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_immediate_sets_negative_flag_if_accumulator_is_smaller_than_operand() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x40;
+        console.cpu.status_flags = 0x00;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0x60);
+        console.compare_immediate();
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_immediate_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0xABCD;
+        console.compare_immediate();
+        assert_eq!(0xABCD + 1, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn compare_immediate_takes_2_cycles() {
+        let mut console = create_test_console();
+        console.compare_immediate();
+        assert_eq!(2, console.cpu.wait_counter);
     }
 
     #[test]
