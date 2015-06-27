@@ -85,13 +85,14 @@ impl Console {
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
             36 => self.bit_test_zero_page(),
+            40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
             56 => self.set_carry_flag(),
             72 => self.push_accumulator(),
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
             96 => self.return_from_subroutine(),
-            104 => self.pull_a(),
+            104 => self.pull_accumulator(),
             112 => self.branch_if_overflow_set(),
             120 => self.set_interrupt_disable_flag(),
             133 => self.store_a_zero_page(),
@@ -229,6 +230,11 @@ impl Console {
         self.set_zero_flag(result);
     }
 
+    fn pull_status_flags_from_stack(&mut self) {
+        self.cpu.wait_counter = 4;
+        self.cpu.status_flags = self.pop_value_from_stack();
+    }
+
     fn and_immediate(&mut self) {
         self.cpu.wait_counter = 2;
         let operand = self.get_byte_operand();
@@ -266,7 +272,7 @@ impl Console {
         self.cpu.program_counter = ((high_byte << 8) | low_byte) + 1;
     }
 
-    fn pull_a(&mut self) {
+    fn pull_accumulator(&mut self) {
         self.cpu.wait_counter = 4;
         let value = self.pop_value_from_stack();
         self.cpu.a = value;
@@ -890,6 +896,38 @@ mod tests {
     }
 
     #[test]
+    fn pull_status_flags_sets_status_flags_correctly() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xAE;
+        console.push_value_into_stack(0xEF);
+        console.pull_status_flags_from_stack();
+        assert_eq!(0xEF, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn pull_status_flags_from_stack_increments_stack_pointer() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0x3f;
+        console.pull_status_flags_from_stack();
+        assert_eq!(0x3f + 1, console.cpu.stack_pointer);
+    }
+
+    #[test]
+    fn pull_status_flags_from_stack_does_not_modify_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1253;
+        console.pull_status_flags_from_stack();
+        assert_eq!(0x1253, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn pull_status_flags_from_stack_takes_4_cycles() {
+        let mut console = create_test_console();
+        console.pull_status_flags_from_stack();
+        assert_eq!(4, console.cpu.wait_counter);
+    }
+
+    #[test]
     fn and_immediate_sets_accumulator_value_to_the_result() {
         let mut console = create_test_console();
         console.cpu.a = 0xE9;
@@ -1185,7 +1223,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.a = 0x00;
         console.push_value_into_stack(0xFA);
-        console.pull_a();
+        console.pull_accumulator();
         assert_eq!(0xFA, console.cpu.a);
     }
 
@@ -1193,7 +1231,7 @@ mod tests {
     fn pull_a_increments_stack_pointer() {
         let mut console = create_test_console();
         console.cpu.stack_pointer = 0x24;
-        console.pull_a();
+        console.pull_accumulator();
         assert_eq!(0x24 + 1, console.cpu.stack_pointer);
     }
 
@@ -1203,7 +1241,7 @@ mod tests {
         console.cpu.a = 0xAA;
         console.cpu.status_flags = 0xF8;
         console.push_value_into_stack(0x00);
-        console.pull_a();
+        console.pull_accumulator();
         assert_eq!(0xFA, console.cpu.status_flags);
     }
 
@@ -1213,7 +1251,7 @@ mod tests {
         console.cpu.a = 0x00;
         console.cpu.status_flags = 0xAA;
         console.push_value_into_stack(0xBA);
-        console.pull_a();
+        console.pull_accumulator();
         assert_eq!(0xA8, console.cpu.status_flags);
     }
 
@@ -1221,14 +1259,14 @@ mod tests {
     fn pull_a_does_not_modify_program_counter() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0x20;
-        console.pull_a();
+        console.pull_accumulator();
         assert_eq!(0x20, console.cpu.program_counter);
     }
 
     #[test]
     fn pull_a_takes_4_cycles() {
         let mut console = create_test_console();
-        console.pull_a();
+        console.pull_accumulator();
         assert_eq!(4, console.cpu.wait_counter);
     }
 

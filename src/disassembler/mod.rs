@@ -54,7 +54,7 @@ fn write(file: &mut File, iter :&mut Peekable<Iter<u8>>) {
                 44 => { write_absolute(file, iter, "bit"); }
                 45 => { write_absolute(file, iter, "and"); }
                 46 => { write_absolute(file, iter, "rol"); }
-                48 => { write_relative(file, iter, "bne"); }
+                48 => { write_relative(file, iter, "bmi"); }
                 49 => { write_indirect_y(file, iter, "and"); }
                 53 => { write_zero_page_x(file, iter, "and"); }
                 54 => { write_zero_page_x(file, iter, "rol"); }
