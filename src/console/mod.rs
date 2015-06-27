@@ -87,6 +87,7 @@ impl Console {
             36 => self.bit_test_zero_page(),
             41 => self.and_immediate(),
             56 => self.set_carry_flag(),
+            72 => self.push_accumulator(),
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
             96 => self.return_from_subroutine(),
@@ -104,7 +105,7 @@ impl Console {
             201 => self.compare_immediate(),
             208 => self.branch_if_not_equal(),
             216 => self.clear_decimal_flag(),
-            234 =>  self.no_operation(),
+            234 => self.no_operation(),
             240 => self.branch_if_equal(),
             248 => self.set_decimal_flag(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
@@ -240,6 +241,12 @@ impl Console {
     fn set_carry_flag(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.status_flags = self.cpu.status_flags | 0x01;
+    }
+
+    fn push_accumulator(&mut self) {
+        self.cpu.wait_counter = 3;
+        let value = self.cpu.a;
+        self.push_value_into_stack(value);
     }
 
     fn jump_absolute(&mut self) {
@@ -1029,6 +1036,45 @@ mod tests {
         console.cpu.stack_pointer = 0xFF;
         console.set_carry_flag();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn push_accumulator_pushes_accumulator_into_stack() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x34;
+        console.push_accumulator();
+        assert_eq!(0x34, console.pop_value_from_stack());
+    }
+
+    #[test]
+    fn push_accumulator_does_not_modify_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x34;
+        console.push_accumulator();
+        assert_eq!(0x34, console.cpu.a);
+    }
+
+    #[test]
+    fn push_accumulator_decrements_stack_pointer() {
+        let mut console = create_test_console();
+        console.cpu.stack_pointer = 0xEF;
+        console.push_accumulator();
+        assert_eq!(0xEF - 1, console.cpu.stack_pointer);
+    }
+
+    #[test]
+    fn push_accumulator_does_not_modify_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x123;
+        console.push_accumulator();
+        assert_eq!(0x123, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn push_accumulator_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.push_accumulator();
+        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]
