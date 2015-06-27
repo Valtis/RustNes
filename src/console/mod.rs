@@ -79,6 +79,7 @@ impl Console {
     }
 
     fn execute_instruction(&mut self, instruction: u8) {
+        println!("P: {:x}", self.cpu.status_flags & 0xEF);
         match instruction {
             8 => self.push_status_flags_into_stack(),
             16 => self.branch_if_positive(),
@@ -232,7 +233,7 @@ impl Console {
 
     fn pull_status_flags_from_stack(&mut self) {
         self.cpu.wait_counter = 4;
-        self.cpu.status_flags = self.pop_value_from_stack();
+        self.cpu.status_flags = self.pop_value_from_stack() | 0x30;
     }
 
     fn and_immediate(&mut self) {
@@ -898,10 +899,20 @@ mod tests {
     #[test]
     fn pull_status_flags_sets_status_flags_correctly() {
         let mut console = create_test_console();
-        console.cpu.status_flags = 0xAE;
-        console.push_value_into_stack(0xEF);
+        console.cpu.status_flags = 0x1A;
+        console.push_value_into_stack(0xFE);
         console.pull_status_flags_from_stack();
-        assert_eq!(0xEF, console.cpu.status_flags);
+        assert_eq!(0xFE, console.cpu.status_flags);
+    }
+
+    // hardwired to 1
+    #[test]
+    fn pull_status_flags_always_sets_4_and_5_bits() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xAE;
+        console.push_value_into_stack(0x00);
+        console.pull_status_flags_from_stack();
+        assert_eq!(0x30, console.cpu.status_flags);
     }
 
     #[test]
