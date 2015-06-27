@@ -102,6 +102,7 @@ impl Console {
             216 => self.clear_decimal_flag(),
             234 =>  self.no_operation(),
             240 => self.branch_if_equal(),
+            248 => self.set_decimal_flag(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.cpu.program_counter - 1, self.cpu),
         }
@@ -247,7 +248,7 @@ impl Console {
 
     fn set_interrupt_disable_flag(&mut self) {
         self.cpu.wait_counter = 2;
-        self.cpu.status_flags = self.cpu.status_flags | 0x04; // set second bit
+        self.cpu.status_flags = self.cpu.status_flags | 0x04; // set bit 2
     }
 
     fn store_a_zero_page(&mut self) {
@@ -300,7 +301,7 @@ impl Console {
 
     fn clear_decimal_flag(&mut self) {
         self.cpu.wait_counter = 2;
-        self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear third bit
+        self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear bit 3
     }
 
     fn no_operation(&mut self) {
@@ -310,6 +311,11 @@ impl Console {
     fn branch_if_equal(&mut self) {
         let condition = self.cpu.status_flags & 0x02 != 0;
         self.do_relative_jump_if(condition);
+    }
+
+    fn set_decimal_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags | 0x08; // set bit 3
     }
 }
 
@@ -1601,5 +1607,37 @@ mod tests {
         console.memory.write(0xEF, 0x7F);
         console.branch_if_equal();
         assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn set_decimal_flag_sets_the_flag_if_it_was_unset() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x07;
+        console.set_decimal_flag();
+        assert_eq!(0x0F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_decimal_flag_does_nothing_if_flag_was_already_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x0A;
+        console.set_decimal_flag();
+        assert_eq!(0x0A, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn set_decimal_flag_does_not_touch_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0xAB12;
+        console.set_decimal_flag();
+        assert_eq!(0xAB12, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn set_decimal_flag_takes_2_cycles() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0xAB12;
+        console.set_decimal_flag();
+        assert_eq!(2, console.cpu.wait_counter);
     }
 }
