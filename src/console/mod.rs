@@ -83,6 +83,7 @@ impl Console {
             16 => self.branch_if_positive(),
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
+            36 => self.bit_test_zero_page(),
             56 => self.set_carry_flag(),
             76 => self.jump_absolute(),
             120 => self.set_interrupt_disable_flag(),
@@ -199,6 +200,19 @@ impl Console {
         self.push_value_into_stack(((return_address & 0xFF00) >> 8) as u8);
         self.push_value_into_stack((return_address & 0xFF) as u8);
         self.cpu.program_counter = address;
+    }
+
+    fn bit_test_zero_page(&mut self) {
+        self.cpu.wait_counter = 3;
+        let address = self.get_byte_operand();
+        let operand = self.memory.read(address as u16);
+        let result = self.cpu.a & operand;
+        // set overflow and negative flags to correct values, unset zero flag
+        self.cpu.status_flags = (self.cpu.status_flags & 0x3D) | (result & 0xC0);
+        // if result is zero, set zero flag
+        if result == 0 {
+            self.cpu.status_flags = self.cpu.status_flags | 0x02;
+        }
     }
 
     fn set_carry_flag(&mut self) {
@@ -594,6 +608,192 @@ mod tests {
         console.cpu.stack_pointer = 0xFF;
         console.jump_to_subroutine();
         assert_eq!(6, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn bit_test_zero_page_does_not_touch_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x08;
+        console.cpu.a = 0xFA;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0xB2);
+        console.bit_test_zero_page();
+        assert_eq!(0xFA, console.cpu.a);
+    }
+
+    #[test]
+    fn bit_test_zero_page_sets_negative_flag_if_bit_is_set_and_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x08;
+        console.cpu.a = 0x80;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x80);
+        console.bit_test_zero_page();
+        assert_eq!(0x88, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_page_does_nothing_if_negative_bit_is_set_and_negative_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0x81;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x80);
+        console.bit_test_zero_page();
+        assert_eq!(0x81, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_page_unsets_negative_flag_if_bit_is_not_set_and_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.a = 0x0F;
+        console.cpu.status_flags = 0x81;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0xFF);
+        console.bit_test_zero_page();
+        assert_eq!(0x01, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_page_does_nothing_if_negative_flag_is_not_set_and_bit_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.a = 0x0F;
+        console.cpu.status_flags = 0x01;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0xFF);
+        console.bit_test_zero_page();
+        assert_eq!(0x01, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_page_sets_overflow_flag_if_overflow_bit_is_set_and_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x04;
+        console.cpu.a = 0x40;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x40);
+        console.bit_test_zero_page();
+        assert_eq!(0x44, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_page_does_nothing_if_overflow_bit_is_set_and_overflow_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x74;
+        console.cpu.a = 0x40;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x40);
+        console.bit_test_zero_page();
+        assert_eq!(0x74, console.cpu.status_flags);
+    }
+
+
+    #[test]
+    fn bit_test_zero_page_unsets_overflow_bit_if_overflow_bit_is_not_set_and_flag_is_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x44;
+        console.cpu.a = 0x0F;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x4F);
+        console.bit_test_zero_page();
+        assert_eq!(0x04, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_page_does_nothing_if_overflow_bit_is_not_set_and_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x0D;
+        console.cpu.a = 0x0F;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x4F);
+        console.bit_test_zero_page();
+        assert_eq!(0x0D, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_sets_zero_flag_if_result_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x10;
+        console.cpu.a = 0x00;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x40);
+        console.bit_test_zero_page();
+        assert_eq!(0x12, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_sets_does_nothing_if_result_is_zero_and_zero_flag_was_already_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x02;
+        console.cpu.a = 0x00;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x40);
+        console.bit_test_zero_page();
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+
+    #[test]
+    fn bit_test_zero_unsets_zero_flag_if_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x02;
+        console.cpu.a = 0x0A;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x4F);
+        console.bit_test_zero_page();
+        assert_eq!(0x00, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_zero_does_nothing_if_result_is_not_zero_and_zero_flag_was_not_set() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.cpu.status_flags = 0x10;
+        console.cpu.a = 0x0A;
+        // pc points to address to zero page that contains actual operand
+        console.memory.write(0x1234, 0x12);
+        console.memory.write(0x12, 0x4F);
+        console.bit_test_zero_page();
+        assert_eq!(0x10, console.cpu.status_flags);
+    }
+
+
+    #[test]
+    fn bit_test_zero_increments_pc_correctly() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.bit_test_zero_page();
+        assert_eq!(0x1234+1, console.cpu.program_counter);
+    }
+    #[test]
+    fn bit_test_zero_page_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.bit_test_zero_page();
+        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]
