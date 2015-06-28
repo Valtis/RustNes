@@ -80,6 +80,7 @@ impl Console {
 
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
+            1 => self.inclusive_or_indirect_x(),
             5 => self.inclusive_or_zero_page(),
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
@@ -382,6 +383,11 @@ impl Console {
 
     fn inclusive_or_absolute_y(&mut self) {
         let value = self.read_absolute_y();
+        self.do_inclusive_or(value);
+    }
+
+    fn inclusive_or_indirect_x(&mut self) {
+        let value = self.read_indirect_x();
         self.do_inclusive_or(value);
     }
 
@@ -1402,6 +1408,22 @@ mod tests {
 
         console.memory.write(0xAF45 + 0x15, 0x7A);
         console.inclusive_or_absolute_y();
+        assert_eq!(0xFB, console.cpu.a);
+    }
+
+    #[test]
+    fn inclusive_or_indirect_x_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.x = 0x15;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0x20);
+
+        console.memory.write(0x20 + 0x15, 0x45);
+        console.memory.write(0x20 + 0x15 + 1, 0xAF);
+
+        console.memory.write(0xAF45, 0x7A);
+        console.inclusive_or_indirect_x();
         assert_eq!(0xFB, console.cpu.a);
     }
 
