@@ -79,7 +79,6 @@ impl Console {
     }
 
     fn execute_instruction(&mut self, instruction: u8) {
-
         match instruction {
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
@@ -461,7 +460,7 @@ impl Console {
         self.cpu.wait_counter = 4;
         let value = self.pop_value_from_stack();
         self.cpu.a = value;
-        self.set_zero_flag(value);
+        self.set_load_flags(value);
     }
 
     fn push_status_flags_into_stack(&mut self) {
@@ -1955,10 +1954,10 @@ mod tests {
     fn pull_accumulator_sets_zero_flag_if_value_pulled_was_zero() {
         let mut console = create_test_console();
         console.cpu.a = 0xAA;
-        console.cpu.status_flags = 0xF8;
+        console.cpu.status_flags = 0x78;
         console.push_value_into_stack(0x00);
         console.pull_accumulator();
-        assert_eq!(0xFA, console.cpu.status_flags);
+        assert_eq!(0x7A, console.cpu.status_flags);
     }
 
     #[test]
@@ -1969,6 +1968,26 @@ mod tests {
         console.push_value_into_stack(0xBA);
         console.pull_accumulator();
         assert_eq!(0xA8, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn pull_accumulator_sets_negative_flag_if_value_pulled_was_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xAA;
+        console.cpu.status_flags = 0x00;
+        console.push_value_into_stack(0xFF);
+        console.pull_accumulator();
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn pull_accumulator_unsets_negative_flag_if_value_pulled_was_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xAA;
+        console.cpu.status_flags = 0x80;
+        console.push_value_into_stack(0x7F);
+        console.pull_accumulator();
+        assert_eq!(0x00, console.cpu.status_flags);
     }
 
     #[test]
