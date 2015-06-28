@@ -83,6 +83,7 @@ impl Console {
             5 => self.inclusive_or_zero_page(),
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
+            13 => self.inclusive_or_absolute(),
             16 => self.branch_if_positive(),
             21 => self.inclusive_or_zero_page_x(),
             24 => self.clear_carry_flag(),
@@ -354,6 +355,11 @@ impl Console {
 
     fn inclusive_or_immediate(&mut self) {
         let value = self.read_immediate();
+        self.do_inclusive_or(value);
+    }
+
+    fn inclusive_or_absolute(&mut self) {
+        let value = self.read_absolute();
         self.do_inclusive_or(value);
     }
 
@@ -1343,6 +1349,19 @@ mod tests {
         console.memory.write(0x1234, 0x45);
         console.memory.write(0x0045 + 0x10, 0x7A);
         console.inclusive_or_zero_page_x();
+        assert_eq!(0xFB, console.cpu.a);
+    }
+
+    #[test]
+    fn inclusive_or_absolute_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0x45);
+        console.memory.write(0x1235, 0xAF);
+
+        console.memory.write(0xAF45 , 0x7A);
+        console.inclusive_or_absolute();
         assert_eq!(0xFB, console.cpu.a);
     }
 
