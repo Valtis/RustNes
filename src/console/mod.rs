@@ -84,12 +84,14 @@ impl Console {
             16 => self.branch_if_positive(),
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
+            33 => self.and_indirect_x(),
             36 => self.bit_test_zero_page(),
             37 => self.and_zero_page(),
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
             45 => self.and_absolute(),
             48 => self.branch_if_negative(),
+            49 => self.and_indirect_y(),
             53 => self.and_zero_page_x(),
             56 => self.set_carry_flag(),
             57 => self.and_absolute_y(),
@@ -329,6 +331,16 @@ impl Console {
 
     fn and_absolute_y(&mut self) {
         let value = self.read_absolute_y();
+        self.do_and(value);
+    }
+
+    fn and_indirect_x(&mut self) {
+        let value = self.read_indirect_x();
+        self.do_and(value);
+    }
+
+    fn and_indirect_y(&mut self) {
+        let value = self.read_indirect_y();
         self.do_and(value);
     }
 
@@ -1121,13 +1133,6 @@ mod tests {
     }
 
     #[test]
-    fn and_immediate_takes_2_cycles() {
-        let mut console = create_test_console();
-        console.and_immediate();
-        assert_eq!(2, console.cpu.wait_counter);
-    }
-
-    #[test]
     fn and_zero_page_sets_accumulator_value_to_the_result() {
         let mut console = create_test_console();
         console.cpu.a = 0xE9;
@@ -1137,21 +1142,6 @@ mod tests {
 
         console.and_zero_page();
         assert_eq!(0x28, console.cpu.a);
-    }
-
-    #[test]
-    fn and_zero_page_increments_program_counter() {
-        let mut console = create_test_console();
-        console.cpu.program_counter = 0x52;
-        console.and_zero_page();
-        assert_eq!(0x53, console.cpu.program_counter);
-    }
-
-    #[test]
-    fn and_zero_page_takes_3_cycles() {
-        let mut console = create_test_console();
-        console.and_zero_page();
-        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]
@@ -1166,20 +1156,6 @@ mod tests {
         assert_eq!(0x28, console.cpu.a);
     }
 
-    #[test]
-    fn and_zero_page_x_increments_program_counter() {
-        let mut console = create_test_console();
-        console.cpu.program_counter = 0x52;
-        console.and_zero_page_x();
-        assert_eq!(0x53, console.cpu.program_counter);
-    }
-
-    #[test]
-    fn and_zero_page_x_takes_4_cycles() {
-        let mut console = create_test_console();
-        console.and_zero_page_x();
-        assert_eq!(4, console.cpu.wait_counter);
-    }
 
     #[test]
     fn and_absolute_sets_accumulator_value_to_the_result() {
@@ -1190,21 +1166,6 @@ mod tests {
         console.memory.write(0x40, 0x3E);
         console.and_absolute();
         assert_eq!(0x28, console.cpu.a);
-    }
-
-    #[test]
-    fn and_absolute_increments_program_counter_twice() {
-        let mut console = create_test_console();
-        console.cpu.program_counter = 0x52;
-        console.and_absolute();
-        assert_eq!(0x52 + 2, console.cpu.program_counter);
-    }
-
-    #[test]
-    fn and_absolute_takes_4_cycles() {
-        let mut console = create_test_console();
-        console.and_absolute();
-        assert_eq!(4, console.cpu.wait_counter);
     }
 
     #[test]
@@ -1220,35 +1181,6 @@ mod tests {
         assert_eq!(0x28, console.cpu.a);
     }
 
-    #[test]
-    fn and_absolute_x_increments_program_counter_twice() {
-        let mut console = create_test_console();
-        console.cpu.program_counter = 0x52;
-        console.and_absolute_x();
-        assert_eq!(0x54, console.cpu.program_counter);
-    }
-
-    #[test]
-    fn and_absolute_x_takes_4_cycles_if_page_boundary_is_not_crossed() {
-        let mut console = create_test_console();
-        console.cpu.x = 0x04;
-        console.cpu.program_counter = 0x52;
-        console.memory.write(0x52, 0x00);
-        console.memory.write(0x53, 0x80);
-        console.and_absolute_x();
-        assert_eq!(4, console.cpu.wait_counter);
-    }
-
-    #[test]
-    fn and_absolute_x_takes_5_cycles_if_page_boundary_is_crossed() {
-        let mut console = create_test_console();
-        console.cpu.x = 0x04;
-        console.cpu.program_counter = 0x52;
-        console.memory.write(0x52, 0xFF);
-        console.memory.write(0x53, 0x80);
-        console.and_absolute_x();
-        assert_eq!(5, console.cpu.wait_counter);
-    }
 
     #[test]
     fn and_absolute_y_sets_accumulator_value_to_the_result() {
@@ -1264,33 +1196,38 @@ mod tests {
     }
 
     #[test]
-    fn and_absolute_y_increments_program_counter_twice() {
+    fn and_indirect_x_sets_accumulator_correctly() {
         let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.x = 0x04;
+
         console.cpu.program_counter = 0x52;
-        console.and_absolute_y();
-        assert_eq!(0x54, console.cpu.program_counter);
+        console.memory.write(0x52, 0x14);
+
+        console.memory.write(0x14 + 0x04, 0x00);
+        console.memory.write(0x14 + 0x04 + 1, 0x80);
+
+        console.memory.write(0x8000, 0x3E);
+        console.and_indirect_x();
+        assert_eq!(0x28, console.cpu.a);
     }
 
-    #[test]
-    fn and_absolute_y_takes_4_cycles_if_page_boundary_is_not_crossed() {
-        let mut console = create_test_console();
-        console.cpu.y = 0x04;
-        console.cpu.program_counter = 0x52;
-        console.memory.write(0x52, 0x00);
-        console.memory.write(0x53, 0x80);
-        console.and_absolute_y();
-        assert_eq!(4, console.cpu.wait_counter);
-    }
 
     #[test]
-    fn and_absolute_y_takes_5_cycles_if_page_boundary_is_crossed() {
+    fn and_indirect_y_sets_accumulator_correctly() {
         let mut console = create_test_console();
+        console.cpu.a = 0xE9;
         console.cpu.y = 0x04;
+
         console.cpu.program_counter = 0x52;
-        console.memory.write(0x52, 0xFF);
-        console.memory.write(0x53, 0x80);
-        console.and_absolute_y();
-        assert_eq!(5, console.cpu.wait_counter);
+        console.memory.write(0x52, 0x14);
+
+        console.memory.write(0x14, 0x00);
+        console.memory.write(0x14 + 1, 0x80);
+
+        console.memory.write(0x8000 + 0x04, 0x3E);
+        console.and_indirect_y();
+        assert_eq!(0x28, console.cpu.a);
     }
 
     #[test]
