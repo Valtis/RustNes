@@ -86,6 +86,7 @@ impl Console {
             9 => self.inclusive_or_immediate(),
             13 => self.inclusive_or_absolute(),
             16 => self.branch_if_positive(),
+            17 => self.inclusive_or_indirect_y(),
             21 => self.inclusive_or_zero_page_x(),
             24 => self.clear_carry_flag(),
             25 => self.inclusive_or_absolute_y(),
@@ -388,6 +389,11 @@ impl Console {
 
     fn inclusive_or_indirect_x(&mut self) {
         let value = self.read_indirect_x();
+        self.do_inclusive_or(value);
+    }
+
+    fn inclusive_or_indirect_y(&mut self) {
+        let value = self.read_indirect_y();
         self.do_inclusive_or(value);
     }
 
@@ -1424,6 +1430,22 @@ mod tests {
 
         console.memory.write(0xAF45, 0x7A);
         console.inclusive_or_indirect_x();
+        assert_eq!(0xFB, console.cpu.a);
+    }
+
+    #[test]
+    fn inclusive_or_indirect_y_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.y = 0x15;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0x20);
+
+        console.memory.write(0x20, 0x45);
+        console.memory.write(0x20 + 1, 0xAF);
+
+        console.memory.write(0xAF45 + 0x15, 0x7A);
+        console.inclusive_or_indirect_y();
         assert_eq!(0xFB, console.cpu.a);
     }
 
