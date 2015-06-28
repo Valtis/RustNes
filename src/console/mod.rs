@@ -85,6 +85,7 @@ impl Console {
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
             36 => self.bit_test_zero_page(),
+            37 => self.and_zero_page(),
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
             48 => self.branch_if_minus_set(),
@@ -93,7 +94,6 @@ impl Console {
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
             96 => self.return_from_subroutine(),
-            101 => self.and_zero_page(),
             104 => self.pull_accumulator(),
             112 => self.branch_if_overflow_set(),
             120 => self.set_interrupt_disable_flag(),
@@ -272,6 +272,11 @@ impl Console {
         self.set_zero_flag(result);
     }
 
+    fn and_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        self.do_and(value);
+    }
+
     fn pull_status_flags_from_stack(&mut self) {
         self.cpu.wait_counter = 4;
         self.cpu.status_flags = self.pop_value_from_stack() | 0x30;
@@ -313,11 +318,6 @@ impl Console {
         let low_byte = self.pop_value_from_stack() as u16;
         let high_byte = self.pop_value_from_stack() as u16;
         self.cpu.program_counter = ((high_byte << 8) | low_byte) + 1;
-    }
-
-    fn and_zero_page(&mut self) {
-        let value = self.read_zero_page();
-        self.do_and(value);
     }
 
     fn pull_accumulator(&mut self) {
@@ -1111,6 +1111,33 @@ mod tests {
         console.bit_test_zero_page();
         assert_eq!(3, console.cpu.wait_counter);
     }
+    
+    #[test]
+    fn and_zero_page_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0xFA);
+        console.memory.write(0xFA, 0x3E);
+
+        console.and_zero_page();
+        assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn and_zero_page_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.and_zero_page();
+        assert_eq!(0x53, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn and_zero_page_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.and_zero_page();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
 
     #[test]
     fn pull_status_flags_sets_status_flags_correctly() {
@@ -1405,34 +1432,6 @@ mod tests {
         console.return_from_subroutine();
         assert_eq!(6, console.cpu.wait_counter);
     }
-
-    #[test]
-    fn and_zero_page_sets_accumulator_value_to_the_result() {
-        let mut console = create_test_console();
-        console.cpu.a = 0xE9;
-        console.cpu.program_counter = 0xABCD;
-        console.memory.write(0xABCD, 0xFA);
-        console.memory.write(0xFA, 0x3E);
-
-        console.and_zero_page();
-        assert_eq!(0x28, console.cpu.a);
-    }
-
-    #[test]
-    fn and_zero_page_increments_program_counter() {
-        let mut console = create_test_console();
-        console.cpu.program_counter = 0x52;
-        console.and_zero_page();
-        assert_eq!(0x53, console.cpu.program_counter);
-    }
-
-    #[test]
-    fn and_zero_page_takes_3_cycles() {
-        let mut console = create_test_console();
-        console.and_zero_page();
-        assert_eq!(3, console.cpu.wait_counter);
-    }
-
 
     #[test]
     fn pull_accumulator_sets_accumulator_to_correct_value() {
