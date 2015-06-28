@@ -120,6 +120,7 @@ impl Console {
             169 => self.load_a_immediate(),
             173 => self.load_a_absolute(),
             176 => self.branch_if_carry_set(),
+            184 => self.clear_overflow_flag(),
             201 => self.compare_immediate(),
             208 => self.branch_if_not_equal(),
             216 => self.clear_decimal_flag(),
@@ -499,6 +500,11 @@ impl Console {
     fn set_interrupt_disable_flag(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.status_flags = self.cpu.status_flags | 0x04; // set bit 2
+    }
+
+    fn clear_overflow_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags & 0xBF;
     }
 
     fn push_accumulator(&mut self) {
@@ -1879,7 +1885,6 @@ mod tests {
 
     #[test]
     fn bit_test_absolute_sets_flags_correctly() {
-
         let mut console = create_test_console();
         console.cpu.status_flags = 0x00;
         console.cpu.a = 0xCA;
@@ -2041,6 +2046,29 @@ mod tests {
     fn setting_interrupt_disable_flag_sets_wait_counter_correctly() {
         let mut console = create_test_console();
         console.set_interrupt_disable_flag();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn clear_overflow_flag_clears_the_flag() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xFF;
+        console.clear_overflow_flag();
+        assert_eq!(0xBF, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_overflow_flag_does_nothing_if_the_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0xBF;
+        console.clear_overflow_flag();
+        assert_eq!(0xBF, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_overflow_flag_takes_2_cycles() {
+        let mut console = create_test_console();
+        console.clear_overflow_flag();
         assert_eq!(2, console.cpu.wait_counter);
     }
 
