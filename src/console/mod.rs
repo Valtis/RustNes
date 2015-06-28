@@ -97,6 +97,7 @@ impl Console {
             37 => self.and_zero_page(),
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
+            44 => self.bit_test_absolute(),
             45 => self.and_absolute(),
             48 => self.branch_if_negative(),
             49 => self.and_indirect_y(),
@@ -467,6 +468,11 @@ impl Console {
 
     fn bit_test_zero_page(&mut self) {
         let operand = self.read_zero_page();
+        self.do_bit_test(operand);
+    }
+
+    fn bit_test_absolute(&mut self) {
+        let operand = self.read_absolute();
         self.do_bit_test(operand);
     }
 
@@ -1839,7 +1845,7 @@ mod tests {
         assert_eq!(6, console.cpu.wait_counter);
     }
 
-    // to a large degree, these test the same things that some more general tests
+    // to a large degree, these bit_test test the same things that some more general tests
     // above. This is however necessary to make sure that the desired function
     // has actually been called
 
@@ -1871,6 +1877,35 @@ mod tests {
         assert_eq!(3, console.cpu.wait_counter);
     }
 
+    #[test]
+    fn bit_test_absolute_sets_flags_correctly() {
+
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.a = 0xCA;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0xFE);
+        console.memory.write(0x1235, 0xCA);
+
+        console.memory.write(0xCAFE, 0xF0);
+        console.bit_test_absolute();
+        assert_eq!(0xC0, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn bit_test_absolute_increments_pc_correctly() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x1234;
+        console.bit_test_absolute();
+        assert_eq!(0x1234+2, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn bit_test_absolute_takes_4_cycles() {
+        let mut console = create_test_console();
+        console.bit_test_absolute();
+        assert_eq!(4, console.cpu.wait_counter);
+    }
 
     #[test]
     fn clear_carry_flag_clears_the_flag_if_set() {
