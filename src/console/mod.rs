@@ -159,9 +159,9 @@ impl Console {
         self.memory.read(address)
     }
 
-    fn read_absolute_x(&mut self) -> u8 {
+    fn read_absolute_with_offset(&mut self, offset: u16) -> u8 {
         let base = self.get_2_byte_operand();
-        let address = base + self.cpu.x as u16;
+        let address = base + offset;
         // if page boundary is crossed, instruction takes 5 cycles. Otherwise it takes 4 cycles
         if base & 0xFF00 == address & 0xFF00 {
             self.cpu.wait_counter = 4;
@@ -169,6 +169,16 @@ impl Console {
             self.cpu.wait_counter = 5;
         }
         self.memory.read(address)
+    }
+
+    fn read_absolute_x(&mut self) -> u8 {
+        let offset = self.cpu.x;
+        self.read_absolute_with_offset(offset as u16)
+    }
+
+    fn read_absolute_y(&mut self) -> u8 {
+        let offset = self.cpu.y;
+        self.read_absolute_with_offset(offset as u16)
     }
 
     fn read_zero_page(&mut self) -> u8 {
@@ -484,6 +494,45 @@ mod tests {
         assert_eq!(4, console.cpu.wait_counter);
     }
 
+    fn read_absolute_with_offset_return_correct_value() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFF);
+        console.memory.write(0x433, 0xE0);
+        console.memory.write(0xE100, 0xC5);
+        assert_eq!(0xC5, console.read_absolute_with_offset(0x01));
+    }
+
+    #[test]
+    fn read_absolute_with_offset_takes_4_cycles_if_page_boundary_is_not_crossed() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x00);
+        console.memory.write(0x433, 0xE0);
+        console.read_absolute_with_offset(0xFA);
+        assert_eq!(4, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn read_absolute_with_offset_takes_5_cycles_if_page_boundary_is_barely_crossed() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFF);
+        console.memory.write(0x433, 0xE0);
+        console.read_absolute_with_offset(0x01);
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn read_absolute_with_offset_takes_5_cycles_if_page_boundary_is_crossed() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFA);
+        console.memory.write(0x433, 0xE0);
+        console.read_absolute_with_offset(0xFE);
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
     #[test]
     fn read_absolute_x_returns_value_pointed_by_16_bit_address_pointed_by_pc_and_x_register() {
         let mut console = create_test_console();
@@ -496,39 +545,15 @@ mod tests {
     }
 
     #[test]
-    fn read_absolute_x_takes_4_cycles_if_page_boundary_is_not_crossed() {
+    fn read_absolute_y_returns_value_pointed_by_16_bit_address_pointed_by_pc_and_y_register() {
         let mut console = create_test_console();
-        console.cpu.x = 0xFA;
-        console.cpu.program_counter = 0x432;
-        console.memory.write(0x432, 0x00);
-        console.memory.write(0x433, 0xE0);
-        console.read_absolute_x();
-        assert_eq!(4, console.cpu.wait_counter);
-    }
-
-
-    #[test]
-    fn read_absolute_x_takes_5_cycles_if_page_boundary_is_barely_crossed() {
-        let mut console = create_test_console();
-        console.cpu.x = 0x01;
-        console.cpu.program_counter = 0x432;
-        console.memory.write(0x432, 0xFF);
-        console.memory.write(0x433, 0xE0);
-        console.read_absolute_x();
-        assert_eq!(5, console.cpu.wait_counter);
-    }
-
-    #[test]
-    fn read_absolute_x_takes_5_cycles_if_page_boundary_is__crossed() {
-        let mut console = create_test_console();
-        console.cpu.x = 0xFE;
+        console.cpu.y = 0xFA;
         console.cpu.program_counter = 0x432;
         console.memory.write(0x432, 0xFA);
         console.memory.write(0x433, 0xE0);
-        console.read_absolute_x();
-        assert_eq!(5, console.cpu.wait_counter);
+        console.memory.write(0xE0FA + 0x00FA, 0x52);
+        assert_eq!(0x52, console.read_absolute_y());
     }
-
 
     #[test]
     fn read_zero_page_returns_value_at_zero_page_pointed_by_program_counter() {
