@@ -112,6 +112,7 @@ impl Console {
             77 => self.exclusive_or_absolute(),
             80 => self.branch_if_overflow_clear(),
             85 => self.exclusive_or_zero_page_x(),
+            89 => self.exclusive_or_absolute_y(),
             93 => self.exclusive_or_absolute_x(),
             96 => self.return_from_subroutine(),
             104 => self.pull_accumulator(),
@@ -441,6 +442,10 @@ impl Console {
         self.do_exclusive_or(value);
     }
 
+    fn exclusive_or_absolute_y(&mut self) {
+        let value = self.read_absolute_y();
+        self.do_exclusive_or(value);
+    }
     fn branch_if_carry_clear(&mut self) {
         let condition = self.cpu.status_flags & 0x01 == 0;
         self.do_relative_jump_if(condition);
@@ -1809,6 +1814,20 @@ mod tests {
         assert_eq!(0x2E, console.cpu.a);
     }
 
+    #[test]
+    fn exclusive_or_absolute_y_sets_correct_value_into_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.y = 0xFA;
+
+        console.cpu.program_counter = 0xFF;
+        console.memory.write(0xFF, 0x29);
+        console.memory.write(0x100, 0xEF);
+        console.memory.write(0xEF29 + 0xFA, 0xAF);
+
+        console.exclusive_or_absolute_y();
+        assert_eq!(0x2E, console.cpu.a);
+    }
     #[test]
     fn branch_if_carry_clear_branches_if_flag_is_not_set() {
         let mut console = create_test_console();
