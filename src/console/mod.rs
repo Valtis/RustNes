@@ -294,6 +294,12 @@ impl Console {
         self.set_load_flags(result);
     }
 
+    fn do_exclusive_or(&mut self, operand: u8) {
+        self.cpu.a = self.cpu.a ^ operand;
+        let result = self.cpu.a;
+        self.set_load_flags(result);
+    }
+
     fn do_relative_jump_if(&mut self, condition: bool) {
         let offset = self.get_byte_operand() as u16;
         if  condition {
@@ -1115,7 +1121,7 @@ mod tests {
     }
 
     #[test]
-    fn do_and_does_not_touch_program_counter_increments_program_counter() {
+    fn do_and_does_not_touch_program_counter() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0x52;
         console.do_and(0xFF);
@@ -1174,7 +1180,7 @@ mod tests {
     }
 
     #[test]
-    fn do_inclusive_or_does_not_touch_program_counter_increments_program_counter() {
+    fn do_inclusive_or_does_not_touch_program_counter() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0x52;
         console.do_inclusive_or(0xFF);
@@ -1185,6 +1191,101 @@ mod tests {
     fn do_inclusive_or_does_not_modify_wait_counter() {
         let mut console = create_test_console();
         console.do_inclusive_or(0x02);
+        assert_eq!(0, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn do_exclusive_or_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.do_exclusive_or(0x3E);
+        assert_eq!(0xD7, console.cpu.a);
+    }
+
+    #[test]
+    fn do_exclusive_or_unsets_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x09;
+        console.cpu.status_flags = 0x02;
+        console.do_exclusive_or(0x3E);
+        assert_eq!(0x00, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_does_nothing_to_zero_flag_if_it_was_not_set_before_and_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x29;
+        console.cpu.status_flags = 0x00;
+        console.do_exclusive_or(0x3E);
+        assert_eq!(0x00, console.cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_exclusive_or_sets_zero_flag_if_result_is_zero_and_flag_was_not_set_before() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xFA;
+        console.cpu.status_flags = 0x00;
+        console.do_exclusive_or(0xFA);
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_does_nothing_to_zero_flag_if_flag_is_set_and_result_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x3E;
+        console.cpu.status_flags = 0x02;
+        console.do_exclusive_or(0x3E);
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_sets_negative_flag_if_result_is_negative_and_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x72;
+        console.cpu.status_flags = 0x00;
+        console.do_exclusive_or(0xFF);
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_does_nothing_to_negative_flag_if_it_is_set_and_number_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x72;
+        console.cpu.status_flags = 0xA1;
+        console.do_exclusive_or(0xFF);
+        assert_eq!(0xA1, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_unsets_negative_flag_if_flag_is_set_and_number_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x8F;
+        console.cpu.status_flags = 0xA0;
+        console.do_exclusive_or(0x82);
+        assert_eq!(0x20, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_does_nothing_to_negative_flag_if_it_is_unset_and_number_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x8A;
+        console.cpu.status_flags = 0x39;
+        console.do_exclusive_or(0xF9);
+        assert_eq!(0x39, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_exclusive_or_does_not_touch_program_counter_() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.do_exclusive_or(0xFF);
+        assert_eq!(0x52, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn do_exclusive_or_does_not_modify_wait_counter() {
+        let mut console = create_test_console();
+        console.do_exclusive_or(0x02);
         assert_eq!(0, console.cpu.wait_counter);
     }
 
