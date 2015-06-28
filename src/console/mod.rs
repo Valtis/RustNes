@@ -89,6 +89,7 @@ impl Console {
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
             48 => self.branch_if_minus_set(),
+            53 => self.and_zero_page_x(),
             56 => self.set_carry_flag(),
             72 => self.push_accumulator(),
             76 => self.jump_absolute(),
@@ -290,6 +291,11 @@ impl Console {
     fn branch_if_minus_set(&mut self) {
         let condition = self.cpu.status_flags & 0x80 != 0;
         self.do_relative_jump_if(condition);
+    }
+
+    fn and_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        self.do_and(value);
     }
 
     fn set_carry_flag(&mut self) {
@@ -1111,7 +1117,7 @@ mod tests {
         console.bit_test_zero_page();
         assert_eq!(3, console.cpu.wait_counter);
     }
-    
+
     #[test]
     fn and_zero_page_sets_accumulator_value_to_the_result() {
         let mut console = create_test_console();
@@ -1254,6 +1260,33 @@ mod tests {
         console.memory.write(0xEF, 0x7F);
         console.branch_if_minus_set();
         assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn and_zero_page_x_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.x = 0x05;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x40);
+        console.memory.write(0x40 + 0x05, 0x3E);
+        console.and_zero_page_x();
+        assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn and_zero_page_x_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.and_zero_page_x();
+        assert_eq!(0x53, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn and_zero_page_x_takes_4_cycles() {
+        let mut console = create_test_console();
+        console.and_zero_page_x();
+        assert_eq!(4, console.cpu.wait_counter);
     }
 
     #[test]
