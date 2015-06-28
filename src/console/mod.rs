@@ -188,6 +188,7 @@ impl Console {
         let address = self.get_byte_operand();
         self.memory.write(address as u16, value);
     }
+
     fn push_value_into_stack(&mut self, value: u8) {
         self.memory.write(0x0100 + self.cpu.stack_pointer as u16, value);
         self.cpu.stack_pointer -= 1;
@@ -430,10 +431,43 @@ mod tests {
     }
 
     #[test]
-    fn read_immediate_set_wait_counter_to_2() {
+    fn read_immediate_sets_wait_counter_to_2() {
         let mut console = create_test_console();
         console.read_immediate();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn read_absolute_returns_value_pointed_by_address_at_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFA);
+        console.memory.write(0x433, 0xE0);
+        console.memory.write(0xE0FA, 0x52);
+        assert_eq!(0x52, console.read_absolute());
+    }
+
+    #[test]
+    fn read_absolute_sets_wait_counter_to_4() {
+        let mut console = create_test_console();
+        console.read_absolute();
+        assert_eq!(4, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn read_zero_page_returns_value_at_zero_pointed_by_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFA);
+        console.memory.write(0x00FA, 0xAE);
+        assert_eq!(0xAE, console.read_zero_page());
+    }
+
+    #[test]
+    fn read_zero_page_sets_wait_counter_to_3() {
+        let mut console = create_test_console();
+        console.read_zero_page();
+        assert_eq!(3, console.cpu.wait_counter);
     }
 
     #[test]
