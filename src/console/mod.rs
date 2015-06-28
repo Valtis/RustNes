@@ -309,7 +309,8 @@ impl Console {
     }
 
     fn and_zero_page(&mut self) {
-
+        let value = self.read_zero_page();
+        self.do_and(value);
     }
 
     fn pull_accumulator(&mut self) {
@@ -1337,9 +1338,36 @@ mod tests {
         assert_eq!(6, console.cpu.wait_counter);
     }
 
+    #[test]
+    fn and_zero_page_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0xFA);
+        console.memory.write(0xFA, 0x3E);
+
+        console.and_zero_page();
+        assert_eq!(0x28, console.cpu.a);
+    }
 
     #[test]
-    fn pull_a_sets_accumulator_to_correct_value() {
+    fn and_zero_page_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.and_zero_page();
+        assert_eq!(0x53, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn and_zero_page_takes_3_cycles() {
+        let mut console = create_test_console();
+        console.and_zero_page();
+        assert_eq!(3, console.cpu.wait_counter);
+    }
+
+
+    #[test]
+    fn pull_accumulator_sets_accumulator_to_correct_value() {
         let mut console = create_test_console();
         console.cpu.a = 0x00;
         console.push_value_into_stack(0xFA);
@@ -1348,7 +1376,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_a_increments_stack_pointer() {
+    fn pull_accumulator_increments_stack_pointer() {
         let mut console = create_test_console();
         console.cpu.stack_pointer = 0x24;
         console.pull_accumulator();
@@ -1356,7 +1384,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_a_sets_zero_flag_if_value_pulled_was_zero() {
+    fn pull_accumulator_sets_zero_flag_if_value_pulled_was_zero() {
         let mut console = create_test_console();
         console.cpu.a = 0xAA;
         console.cpu.status_flags = 0xF8;
@@ -1366,7 +1394,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_a_unsets_zero_flag_if_value_pulled_was_not_zero() {
+    fn pull_accumulator_unsets_zero_flag_if_value_pulled_was_not_zero() {
         let mut console = create_test_console();
         console.cpu.a = 0x00;
         console.cpu.status_flags = 0xAA;
@@ -1376,7 +1404,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_a_does_not_modify_program_counter() {
+    fn pull_accumulator_does_not_modify_program_counter() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0x20;
         console.pull_accumulator();
@@ -1384,7 +1412,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_a_takes_4_cycles() {
+    fn pull_accumulator_takes_4_cycles() {
         let mut console = create_test_console();
         console.pull_accumulator();
         assert_eq!(4, console.cpu.wait_counter);
