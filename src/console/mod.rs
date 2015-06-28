@@ -79,7 +79,6 @@ impl Console {
     }
 
     fn execute_instruction(&mut self, instruction: u8) {
-        println!("P: {:x}", self.cpu.status_flags & 0xEF);
         match instruction {
             8 => self.push_status_flags_into_stack(),
             16 => self.branch_if_positive(),
@@ -146,10 +145,18 @@ impl Console {
         byte
     }
 
-    fn do_immediate_load(&mut self) -> u8 {
-        self.cpu.wait_counter = 2;
+    fn get_zero_page_operand(&mut self) -> u8 {
+        let address = self.get_byte_operand();
+        self.memory.read(address as u16)
+    }
 
-        let value = self.get_byte_operand();
+    fn read_immediate(&mut self) -> u8 {
+        self.cpu.wait_counter = 2;
+        self.get_byte_operand()
+    }
+
+    fn do_immediate_load(&mut self) -> u8 {
+        let value = self.read_immediate();
         self.set_negative_flag(value);
         self.set_zero_flag(value);
         value
@@ -168,6 +175,13 @@ impl Console {
     fn pop_value_from_stack(&mut self) -> u8 {
         self.cpu.stack_pointer += 1;
         self.memory.read(0x0100 + self.cpu.stack_pointer as u16)
+    }
+
+    fn do_and(&mut self, operand: u8) {
+        self.cpu.a = self.cpu.a & operand;
+        let result = self.cpu.a;
+        self.set_negative_flag(result);
+        self.set_zero_flag(result);
     }
 
     fn do_relative_jump_if(&mut self, condition: bool) {
@@ -224,8 +238,7 @@ impl Console {
 
     fn bit_test_zero_page(&mut self) {
         self.cpu.wait_counter = 3;
-        let address = self.get_byte_operand();
-        let operand = self.memory.read(address as u16);
+        let operand = self.get_zero_page_operand();
         let result = self.cpu.a & operand;
         // set overflow and negative flags to correct values, unset zero flag
         self.cpu.status_flags = (self.cpu.status_flags & 0x3D) | (result & 0xC0);
@@ -238,12 +251,8 @@ impl Console {
     }
 
     fn and_immediate(&mut self) {
-        self.cpu.wait_counter = 2;
-        let operand = self.get_byte_operand();
-        self.cpu.a = self.cpu.a & operand;
-        let result = self.cpu.a;
-        self.set_negative_flag(result);
-        self.set_zero_flag(result);
+        let operand = self.read_immediate();
+        self.do_and(operand);
     }
 
     fn branch_if_minus_set(&mut self) {
@@ -389,6 +398,22 @@ mod tests {
             cpu: get_cpu(&TvSystem::NTSC),
         }
     }
+
+    #[test]
+    fn read_immediate_returns_value_pointed_by_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFA);
+        assert_eq!(0xFA, console.read_immediate());
+    }
+
+    #[test]
+    fn read_immediate_set_wait_counter_to_2() {
+        let mut console = create_test_console();
+        console.read_immediate();
+        assert_eq!(2, console.cpu.wait_counter);
+    }
+
     #[test]
     fn set_negative_flag_sets_the_flag_if_flag_value_is_negative_and_flag_was_not_set() {
         let mut console = create_test_console();
