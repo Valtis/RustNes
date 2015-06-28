@@ -145,7 +145,7 @@ impl Console {
         byte
     }
 
-    fn get_zero_page_operand(&mut self) -> u8 {
+    fn read_zero_page(&mut self) -> u8 {
         let address = self.get_byte_operand();
         self.memory.read(address as u16)
     }
@@ -155,11 +155,30 @@ impl Console {
         self.get_byte_operand()
     }
 
-    fn do_immediate_load(&mut self) -> u8 {
-        let value = self.read_immediate();
+    fn read_absolute(&mut self) -> u8 {
+        self.cpu.wait_counter = 4;
+        let address = self.get_2_byte_operand();
+        self.memory.read(address)
+    }
+
+    fn set_load_flags(&mut self, value: u8) {
         self.set_negative_flag(value);
         self.set_zero_flag(value);
-        value
+    }
+
+    fn load_a(&mut self, value: u8) {
+        self.cpu.a = value;
+        self.set_load_flags(value);
+    }
+
+    fn load_x(&mut self, value: u8) {
+        self.cpu.x = value;
+        self.set_load_flags(value);
+    }
+
+    fn load_y(&mut self, value: u8) {
+        self.cpu.y = value;
+        self.set_load_flags(value);
     }
 
     fn do_zero_page_store(&mut self, value: u8) {
@@ -238,7 +257,7 @@ impl Console {
 
     fn bit_test_zero_page(&mut self) {
         self.cpu.wait_counter = 3;
-        let operand = self.get_zero_page_operand();
+        let operand = self.read_zero_page();
         let result = self.cpu.a & operand;
         // set overflow and negative flags to correct values, unset zero flag
         self.cpu.status_flags = (self.cpu.status_flags & 0x3D) | (result & 0xC0);
@@ -326,20 +345,18 @@ impl Console {
     }
 
     fn load_x_immediate(&mut self) {
-        self.cpu.x = self.do_immediate_load();
+        let value = self.read_immediate();
+        self.load_x(value);
     }
 
     fn load_a_immediate(&mut self) {
-        self.cpu.a = self.do_immediate_load();
+        let value = self.read_immediate();
+        self.load_a(value);
     }
 
     fn load_a_absolute(&mut self) {
-        self.cpu.wait_counter = 4;
-        let address = self.get_2_byte_operand();
-        let operand = self.memory.read(address);
-        self.cpu.a = operand;
-        self.set_negative_flag(operand);
-        self.set_zero_flag(operand);
+        let value = self.read_absolute();
+        self.load_a(value);
     }
 
     fn branch_if_carry_set(&mut self) {
@@ -348,8 +365,7 @@ impl Console {
     }
 
     fn compare_immediate(&mut self) {
-        self.cpu.wait_counter = 2;
-        let operand = self.get_byte_operand();
+        let operand = self.read_immediate();
         if operand > self.cpu.a {
             self.cpu.status_flags = self.cpu.status_flags | 0x80;
         } else if operand == self.cpu.a {
