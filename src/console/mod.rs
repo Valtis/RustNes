@@ -112,6 +112,7 @@ impl Console {
             76 => self.jump_absolute(),
             77 => self.exclusive_or_absolute(),
             80 => self.branch_if_overflow_clear(),
+            81 => self.exclusive_or_indirect_y(),
             85 => self.exclusive_or_zero_page_x(),
             89 => self.exclusive_or_absolute_y(),
             93 => self.exclusive_or_absolute_x(),
@@ -450,6 +451,11 @@ impl Console {
 
     fn exclusive_or_indirect_x(&mut self) {
         let value = self.read_indirect_x();
+        self.do_exclusive_or(value);
+    }
+
+    fn exclusive_or_indirect_y(&mut self) {
+        let value = self.read_indirect_y();
         self.do_exclusive_or(value);
     }
 
@@ -1852,6 +1858,24 @@ mod tests {
         console.memory.write(0xEF29 , 0xAF);
 
         console.exclusive_or_indirect_x();
+        assert_eq!(0x2E, console.cpu.a);
+    }
+
+    #[test]
+    fn exclusive_or_indirect_y_sets_correct_value_into_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.y = 0x04;
+
+        console.cpu.program_counter = 0xFF;
+        console.memory.write(0xFF, 0x29);
+
+        console.memory.write(0x29, 0x29);
+        console.memory.write(0x29 + 1, 0xEF);
+
+        console.memory.write(0xEF29 + 0x04, 0xAF);
+
+        console.exclusive_or_indirect_y();
         assert_eq!(0x2E, console.cpu.a);
     }
 
