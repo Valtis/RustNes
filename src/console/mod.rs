@@ -192,7 +192,7 @@ impl Console {
     fn read_zero_page_with_offset(&mut self, offset: u16) -> u8 {
         self.cpu.wait_counter = 4;
         let address = self.get_byte_operand() as u16 + offset;
-        self.memory.read(address % 256)
+        self.memory.read(address & 0xFF)
     }
 
     fn read_zero_page_x(&mut self) -> u8 {
@@ -203,6 +203,15 @@ impl Console {
     fn read_zero_page_y(&mut self) -> u8 {
         let offset = self.cpu.y as u16;
         self.read_zero_page_with_offset(offset)
+    }
+
+    fn read_indirect_x(&mut self) -> u8 {
+        self.cpu.wait_counter = 6;
+        let base = self.get_byte_operand() as u16;
+        let low_byte = self.memory.read((base + self.cpu.x as u16) & 0x00FF) as u16;
+        let high_byte = self.memory.read((base + self.cpu.x as u16 + 1) & 0x00FF) as u16;
+
+        self.memory.read((high_byte << 8) | low_byte)
     }
 
     fn set_load_flags(&mut self, value: u8) {
@@ -655,10 +664,6 @@ mod tests {
         assert_eq!(0x50, console.cpu.y);
     }
 
-
-
-
-
     #[test]
     fn read_immediate_returns_value_pointed_by_program_counter() {
         let mut console = create_test_console();
@@ -741,6 +746,7 @@ mod tests {
         assert_eq!(0x52, console.read_absolute_x());
     }
 
+
     #[test]
     fn read_absolute_y_returns_value_pointed_by_16_bit_address_pointed_by_pc_and_y_register() {
         let mut console = create_test_console();
@@ -811,6 +817,44 @@ mod tests {
         console.memory.write(0x432, 0x80);
         console.memory.write(0x008F, 0xAE);
         assert_eq!(0xAE, console.read_zero_page_y());
+    }
+
+
+    #[test]
+    fn read_indirect_x_returns_correct_value() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+
+        console.memory.write(0x80+0x04, 0x80);
+        console.memory.write(0x80+0x05, 0xAF);
+
+        console.memory.write(0xAF80, 0xAE);
+
+        assert_eq!(0xAE, console.read_indirect_x());
+    }
+
+    #[test]
+    fn read_indirect_x_wraps_zero_page_address_around() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFE);
+
+        console.memory.write(0x02, 0x80);
+        console.memory.write(0x03, 0xAF);
+
+        console.memory.write(0xAF80, 0xAE);
+
+        assert_eq!(0xAE, console.read_indirect_x());
+    }
+
+    #[test]
+    fn read_indirect_x_sets_wait_counter_to_6() {
+        let mut console = create_test_console();
+        console.read_indirect_x();
+        assert_eq!(6, console.cpu.wait_counter);
     }
 
     #[test]
