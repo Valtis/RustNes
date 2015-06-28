@@ -88,6 +88,7 @@ impl Console {
             37 => self.and_zero_page(),
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
+            45 => self.and_absolute(),
             48 => self.branch_if_negative(),
             53 => self.and_zero_page_x(),
             56 => self.set_carry_flag(),
@@ -284,6 +285,11 @@ impl Console {
 
     fn and_zero_page_x(&mut self) {
         let value = self.read_zero_page_x();
+        self.do_and(value);
+    }
+
+    fn and_absolute(&mut self) {
+        let value = self.read_absolute();
         self.do_and(value);
     }
 
@@ -1032,6 +1038,32 @@ mod tests {
     fn and_zero_page_x_takes_4_cycles() {
         let mut console = create_test_console();
         console.and_zero_page_x();
+        assert_eq!(4, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn and_absolute_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.program_counter = 0x15;
+        console.memory.write(0x15, 0x40);
+        console.memory.write(0x40, 0x3E);
+        console.and_absolute();
+        assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn and_absolute_increments_program_counter_twice() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.and_absolute();
+        assert_eq!(0x52 + 2, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn and_absolute_takes_4_cycles() {
+        let mut console = create_test_console();
+        console.and_absolute();
         assert_eq!(4, console.cpu.wait_counter);
     }
 
