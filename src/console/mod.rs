@@ -321,7 +321,7 @@ impl Console {
     fn do_bit_test(&mut self, operand: u8) {
         let result = self.cpu.a & operand;
         // set overflow and negative flags to correct values, unset zero flag
-        self.cpu.status_flags = (self.cpu.status_flags & 0x3D) | (result & 0xC0);
+        self.cpu.status_flags = (self.cpu.status_flags & 0x3D) | (operand & 0xC0);
         self.set_zero_flag(result);
     }
 
@@ -1267,6 +1267,14 @@ mod tests {
         assert_eq!(0x88, console.cpu.status_flags);
     }
 
+    fn do_bit_test__sets_negative_flag_if_bit_is_set_in_memory_and_not_in_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x08;
+        console.cpu.a = 0x00;
+        console.do_bit_test(0x80);
+        assert_eq!(0x88, console.cpu.status_flags);
+    }
+
     #[test]
     fn do_bit_test_does_nothing_if_negative_bit_is_set_and_negative_flag_is_set() {
         let mut console = create_test_console();
@@ -1282,7 +1290,7 @@ mod tests {
         console.cpu.a = 0x0F;
         console.cpu.status_flags = 0x81;
         console.memory.write(0x1234, 0x12);
-        console.do_bit_test(0xFF);
+        console.do_bit_test(0x0F);
         assert_eq!(0x01, console.cpu.status_flags);
     }
 
@@ -1291,7 +1299,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.a = 0x0F;
         console.cpu.status_flags = 0x01;
-        console.do_bit_test(0xFF);
+        console.do_bit_test(0x0F);
         assert_eq!(0x01, console.cpu.status_flags);
     }
 
@@ -1301,6 +1309,15 @@ mod tests {
         console.cpu.status_flags = 0x04;
         console.cpu.a = 0x40;
         console.do_bit_test(0x40);
+        assert_eq!(0x44, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_bit_test_sets_overflow_flag_if_overflow_bit_is_set_but_accumulator_bit_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x04;
+        console.cpu.a = 0x02;
+        console.do_bit_test(0x42);
         assert_eq!(0x44, console.cpu.status_flags);
     }
 
@@ -1319,7 +1336,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x44;
         console.cpu.a = 0x0F;
-        console.do_bit_test(0x4F);
+        console.do_bit_test(0x2F);
         assert_eq!(0x04, console.cpu.status_flags);
     }
 
@@ -1328,7 +1345,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x0D;
         console.cpu.a = 0x0F;
-        console.do_bit_test(0x4F);
+        console.do_bit_test(0x2F);
         assert_eq!(0x0D, console.cpu.status_flags);
     }
 
@@ -1337,7 +1354,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x10;
         console.cpu.a = 0x00;
-        console.do_bit_test(0x40);
+        console.do_bit_test(0x20);
         assert_eq!(0x12, console.cpu.status_flags);
     }
 
@@ -1346,7 +1363,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x02;
         console.cpu.a = 0x00;
-        console.do_bit_test(0x40);
+        console.do_bit_test(0x20);
         assert_eq!(0x02, console.cpu.status_flags);
     }
 
@@ -1355,7 +1372,7 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x02;
         console.cpu.a = 0x0A;
-        console.do_bit_test(0x4F);
+        console.do_bit_test(0x2F);
         assert_eq!(0x00, console.cpu.status_flags);
     }
 
@@ -1364,10 +1381,9 @@ mod tests {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x10;
         console.cpu.a = 0x0A;
-        console.do_bit_test(0x4F);
+        console.do_bit_test(0x2F);
         assert_eq!(0x10, console.cpu.status_flags);
     }
-
 
     #[test]
     fn and_immediate_sets_accumulator_value_to_the_result() {
