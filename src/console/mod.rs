@@ -93,6 +93,7 @@ impl Console {
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
             96 => self.return_from_subroutine(),
+            101 => self.and_zero_page(),
             104 => self.pull_accumulator(),
             112 => self.branch_if_overflow_set(),
             120 => self.set_interrupt_disable_flag(),
@@ -146,6 +147,7 @@ impl Console {
     }
 
     fn read_zero_page(&mut self) -> u8 {
+        self.cpu.wait_counter = 3;
         let address = self.get_byte_operand();
         self.memory.read(address as u16)
     }
@@ -256,7 +258,6 @@ impl Console {
     }
 
     fn bit_test_zero_page(&mut self) {
-        self.cpu.wait_counter = 3;
         let operand = self.read_zero_page();
         let result = self.cpu.a & operand;
         // set overflow and negative flags to correct values, unset zero flag
@@ -305,6 +306,10 @@ impl Console {
         let low_byte = self.pop_value_from_stack() as u16;
         let high_byte = self.pop_value_from_stack() as u16;
         self.cpu.program_counter = ((high_byte << 8) | low_byte) + 1;
+    }
+
+    fn and_zero_page(&mut self) {
+
     }
 
     fn pull_accumulator(&mut self) {
@@ -428,6 +433,101 @@ mod tests {
         let mut console = create_test_console();
         console.read_immediate();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn do_and_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.do_and(0x3E);
+        assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn do_and_unsets_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.status_flags = 0x02;
+        console.do_and(0x3E);
+        assert_eq!(0x00, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_does_nothing_to_zero_flag_if_it_was_not_set_before_and_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.status_flags = 0x00;
+        console.do_and(0x3E);
+        assert_eq!(0x00, console.cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_and_sets_zero_flag_if_result_is_zero_and_flag_was_not_set_before() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x00;
+        console.cpu.status_flags = 0x00;
+        console.do_and(0x3E);
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_does_nothing_to_zero_flag_if_flag_is_set_and_result_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x00;
+        console.cpu.status_flags = 0x02;
+        console.do_and(0x3E);
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_sets_negative_flag_if_result_is_negative_and_flag_is_not_set() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0x00;
+        console.do_and(0xFF);
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_does_nothing_to_negative_flag_if_it_is_set_and_number_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0xA1;
+        console.do_and(0xFF);
+        assert_eq!(0xA1, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_unsets_negative_flag_if_flag_is_set_and_number_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0xAF;
+        console.do_and(0x7F);
+        assert_eq!(0x2F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_does_nothing_to_negative_flag_if_it_is_unset_and_number_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x80;
+        console.cpu.status_flags = 0x3F;
+        console.do_and(0x7F);
+        assert_eq!(0x3F, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_and_does_not_touch_program_counter_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.do_and(0xFF);
+        assert_eq!(0x52, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn do_and_does_not_modify_wait_counter() {
+        let mut console = create_test_console();
+        console.do_and(0x02);
+        assert_eq!(0, console.cpu.wait_counter);
     }
 
     #[test]
