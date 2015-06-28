@@ -79,6 +79,7 @@ impl Console {
     }
 
     fn execute_instruction(&mut self, instruction: u8) {
+
         match instruction {
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
@@ -508,6 +509,9 @@ impl Console {
 
     fn compare_immediate(&mut self) {
         let operand = self.read_immediate();
+        // unset negative\zero\carry flags
+        self.cpu.status_flags = self.cpu.status_flags & 0x7C;
+
         if operand > self.cpu.a {
             self.cpu.status_flags = self.cpu.status_flags | 0x80;
         } else if operand == self.cpu.a {
@@ -2217,6 +2221,30 @@ mod tests {
         console.memory.write(0xABCD, 0x60);
         console.compare_immediate();
         assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    // found a bug, introduced test case triggering it
+    #[test]
+    fn compare_immediate_unsets_negative_flag_and_sets_carry_and_zero_flags_if_result_is_equal_and_negative_was_set_before() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xFF;
+        console.cpu.status_flags = 0xEC;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0xFF);
+        console.compare_immediate();
+        assert_eq!(0x6F, console.cpu.status_flags);
+    }
+
+    // testing similar case as above
+    #[test]
+    fn compare_immediate_unsets_zero_and_carry_flags_and_sets_negative_flag_if_accumulator_is_smaller() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x20;
+        console.cpu.status_flags = 0x7F;
+        console.cpu.program_counter = 0xABCD;
+        console.memory.write(0xABCD, 0xFF);
+        console.compare_immediate();
+        assert_eq!(0xFC, console.cpu.status_flags);
     }
 
     #[test]
