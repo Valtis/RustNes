@@ -109,7 +109,9 @@ impl Console {
             72 => self.push_accumulator(),
             73 => self.exclusive_or_immediate(),
             76 => self.jump_absolute(),
+            77 => self.exclusive_or_absolute(),
             80 => self.branch_if_overflow_clear(),
+            85 => self.exclusive_or_zero_page_x(),
             96 => self.return_from_subroutine(),
             104 => self.pull_accumulator(),
             112 => self.branch_if_overflow_set(),
@@ -420,6 +422,16 @@ impl Console {
 
     fn exclusive_or_zero_page(&mut self) {
         let value = self.read_zero_page();
+        self.do_exclusive_or(value);
+    }
+
+    fn exclusive_or_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        self.do_exclusive_or(value);
+    }
+
+    fn exclusive_or_absolute(&mut self) {
+        let value = self.read_absolute();
         self.do_exclusive_or(value);
     }
 
@@ -1745,6 +1757,34 @@ mod tests {
         console.memory.write(0x29, 0xAF);
 
         console.exclusive_or_zero_page();
+        assert_eq!(0x2E, console.cpu.a);
+    }
+
+    #[test]
+    fn exclusive_or_zero_page_x_sets_correct_value_into_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.x = 0x25;
+
+        console.cpu.program_counter = 0xFF;
+        console.memory.write(0xFF, 0x29);
+        console.memory.write(0x29 + 0x25, 0xAF);
+
+        console.exclusive_or_zero_page_x();
+        assert_eq!(0x2E, console.cpu.a);
+    }
+
+    #[test]
+    fn exclusive_or_zero_page_absolute_sets_correct_value_into_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+
+        console.cpu.program_counter = 0xFF;
+        console.memory.write(0xFF, 0x29);
+        console.memory.write(0x100, 0xEF);
+        console.memory.write(0xEF29, 0xAF);
+
+        console.exclusive_or_absolute();
         assert_eq!(0x2E, console.cpu.a);
     }
 
