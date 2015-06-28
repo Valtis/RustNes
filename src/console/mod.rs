@@ -81,6 +81,7 @@ impl Console {
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
             8 => self.push_status_flags_into_stack(),
+            9 => self.inclusive_or_immediate(),
             16 => self.branch_if_positive(),
             24 => self.clear_carry_flag(),
             32 => self.jump_to_subroutine(),
@@ -275,8 +276,13 @@ impl Console {
     fn do_and(&mut self, operand: u8) {
         self.cpu.a = self.cpu.a & operand;
         let result = self.cpu.a;
-        self.set_negative_flag(result);
-        self.set_zero_flag(result);
+        self.set_load_flags(result);
+    }
+
+    fn do_inclusive_or(&mut self, operand: u8) {
+        self.cpu.a = self.cpu.a | operand;
+        let result = self.cpu.a;
+        self.set_load_flags(result);
     }
 
     fn do_relative_jump_if(&mut self, condition: bool) {
@@ -342,6 +348,11 @@ impl Console {
     fn and_indirect_y(&mut self) {
         let value = self.read_indirect_y();
         self.do_and(value);
+    }
+
+    fn inclusive_or_immediate(&mut self) {
+        let value = self.read_immediate();
+        self.do_inclusive_or(value);
     }
 
     fn branch_if_carry_clear(&mut self) {
@@ -889,8 +900,6 @@ mod tests {
         assert_eq!(6, console.cpu.wait_counter);
     }
 
-
-
     #[test]
     fn read_indirect_y_returns_correct_value() {
 
@@ -1057,6 +1066,65 @@ mod tests {
     fn do_and_does_not_modify_wait_counter() {
         let mut console = create_test_console();
         console.do_and(0x02);
+        assert_eq!(0, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn do_inclusive_or_sets_accumulator_value_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x23;
+        console.do_inclusive_or(0x5D);
+        assert_eq!(0x7F, console.cpu.a);
+    }
+
+    #[test]
+    fn do_inclusive_or_sets_negative_flag_if_result_is_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.a = 0x00;
+        console.do_inclusive_or(0x80);
+        assert_eq!(0x80, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_inclusive_or_unsets_negative_flag_if_result_is_not_negative() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x80;
+        console.cpu.a = 0x00;
+        console.do_inclusive_or(0x70);
+        assert_eq!(0x00, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_inclusive_or_sets_zero_flag_if_result_is_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x00;
+        console.cpu.a = 0x00;
+        console.do_inclusive_or(0x00);
+        assert_eq!(0x02, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_inclusive_or_unsets_zero_flag_if_result_is_not_zero() {
+        let mut console = create_test_console();
+        console.cpu.status_flags = 0x02;
+        console.cpu.a = 0x40;
+        console.do_inclusive_or(0x00);
+        assert_eq!(0x00, console.cpu.status_flags);
+    }
+
+    #[test]
+    fn do_inclusive_or_does_not_touch_program_counter_increments_program_counter() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.do_inclusive_or(0xFF);
+        assert_eq!(0x52, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn do_inclusive_or_does_not_modify_wait_counter() {
+        let mut console = create_test_console();
+        console.do_inclusive_or(0x02);
         assert_eq!(0, console.cpu.wait_counter);
     }
 
@@ -1228,6 +1296,16 @@ mod tests {
         console.memory.write(0x8000 + 0x04, 0x3E);
         console.and_indirect_y();
         assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn inclusive_or_immediate_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0x7A);
+        console.inclusive_or_immediate();
+        assert_eq!(0xFB, console.cpu.a);
     }
 
     #[test]
