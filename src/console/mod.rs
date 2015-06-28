@@ -80,6 +80,7 @@ impl Console {
 
     fn execute_instruction(&mut self, instruction: u8) {
         match instruction {
+            5 => self.inclusive_or_zero_page(),
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
             16 => self.branch_if_positive(),
@@ -352,6 +353,11 @@ impl Console {
 
     fn inclusive_or_immediate(&mut self) {
         let value = self.read_immediate();
+        self.do_inclusive_or(value);
+    }
+
+    fn inclusive_or_zero_page(&mut self) {
+        let value = self.read_zero_page();
         self.do_inclusive_or(value);
     }
 
@@ -1310,6 +1316,18 @@ mod tests {
         console.inclusive_or_immediate();
         assert_eq!(0xFB, console.cpu.a);
     }
+
+    #[test]
+    fn inclusive_or_zero_page_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0x45);
+        console.memory.write(0x0045, 0x7A);
+        console.inclusive_or_zero_page();
+        assert_eq!(0xFB, console.cpu.a);
+    }
+
 
     #[test]
     fn branch_if_carry_clear_branches_if_flag_is_not_set() {
