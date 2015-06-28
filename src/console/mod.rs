@@ -207,11 +207,31 @@ impl Console {
 
     fn read_indirect_x(&mut self) -> u8 {
         self.cpu.wait_counter = 6;
-        let base = self.get_byte_operand() as u16;
-        let low_byte = self.memory.read((base + self.cpu.x as u16) & 0x00FF) as u16;
-        let high_byte = self.memory.read((base + self.cpu.x as u16 + 1) & 0x00FF) as u16;
+        let zero_page_address = self.get_byte_operand() as u16;
+        let low_byte = self.memory.read((zero_page_address + self.cpu.x as u16) & 0x00FF) as u16;
+        let high_byte = self.memory.read((zero_page_address + self.cpu.x as u16 + 1) & 0x00FF) as u16;
 
         self.memory.read((high_byte << 8) | low_byte)
+    }
+
+    fn read_indirect_y(&mut self) -> u8 {
+        let zero_page_address =  self.get_byte_operand() as u16;
+
+        let low_byte = self.memory.read(zero_page_address) as u16;
+        let high_byte = self.memory.read((zero_page_address + 1) & 0x00FF) as u16;
+
+        let base_address = (high_byte << 8) | low_byte;
+        let four_byte_address =  base_address as u32 + self.cpu.y as u32;
+
+        let final_address = (four_byte_address & 0xFFFF) as u16; // wrap around
+
+        if final_address & 0xFF00 == base_address & 0xFF00 {
+            self.cpu.wait_counter = 5;
+        } else {
+            self.cpu.wait_counter = 6;
+        }
+
+        self.memory.read(final_address)
     }
 
     fn set_load_flags(&mut self, value: u8) {
@@ -854,6 +874,82 @@ mod tests {
     fn read_indirect_x_sets_wait_counter_to_6() {
         let mut console = create_test_console();
         console.read_indirect_x();
+        assert_eq!(6, console.cpu.wait_counter);
+    }
+
+
+
+    #[test]
+    fn read_indirect_y_returns_correct_value() {
+
+        let mut console = create_test_console();
+        console.cpu.y = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+
+        console.memory.write(0x80, 0x80);
+        console.memory.write(0x81, 0xAF);
+
+        console.memory.write(0xAF80 + 0x04, 0xAE);
+
+        assert_eq!(0xAE, console.read_indirect_y());
+    }
+
+    #[test]
+    fn read_indirect_y_wraps_zero_page_address_around() {
+
+        let mut console = create_test_console();
+        console.cpu.y = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0xFF);
+
+        console.memory.write(0xFF, 0xFF);
+        console.memory.write(0x00, 0xAB);
+
+        console.memory.write(0x0ABFF + 0x04, 0xAE);
+
+        assert_eq!(0xAE, console.read_indirect_y());
+    }
+
+    #[test]
+    fn read_indirect_y_wraps_final_address_around() {
+
+        let mut console = create_test_console();
+        console.cpu.y = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+
+        console.memory.write(0x80, 0xFF);
+        console.memory.write(0x81, 0xFF);
+
+        console.memory.write(0x0003, 0xAE);
+
+        assert_eq!(0xAE, console.read_indirect_y());
+    }
+
+    #[test]
+    fn read_indirect_y_takes_5_cycles_if_no_page_boundary_is_crossed() {
+        let mut console = create_test_console();
+        console.cpu.y = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+
+        console.memory.write(0x80, 0x80);
+        console.memory.write(0x81, 0xAF);
+        console.read_indirect_y();
+        assert_eq!(5, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn read_indirect_takes_6_cycles_if_page_boundary_is_crossed() {
+        let mut console = create_test_console();
+        console.cpu.y = 0x04;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+
+        console.memory.write(0x80, 0xFE);
+        console.memory.write(0x81, 0xAF);
+        console.read_indirect_y();
         assert_eq!(6, console.cpu.wait_counter);
     }
 
