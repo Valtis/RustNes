@@ -87,6 +87,7 @@ impl Console {
             16 => self.branch_if_positive(),
             21 => self.inclusive_or_zero_page_x(),
             24 => self.clear_carry_flag(),
+            29 => self.inclusive_or_absolute_x(),
             32 => self.jump_to_subroutine(),
             33 => self.and_indirect_x(),
             36 => self.bit_test_zero_page(),
@@ -358,11 +359,6 @@ impl Console {
         self.do_inclusive_or(value);
     }
 
-    fn inclusive_or_absolute(&mut self) {
-        let value = self.read_absolute();
-        self.do_inclusive_or(value);
-    }
-
     fn inclusive_or_zero_page(&mut self) {
         let value = self.read_zero_page();
         self.do_inclusive_or(value);
@@ -370,6 +366,16 @@ impl Console {
 
     fn inclusive_or_zero_page_x(&mut self) {
         let value = self.read_zero_page_x();
+        self.do_inclusive_or(value);
+    }
+
+    fn inclusive_or_absolute(&mut self) {
+        let value = self.read_absolute();
+        self.do_inclusive_or(value);
+    }
+
+    fn inclusive_or_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
         self.do_inclusive_or(value);
     }
 
@@ -1362,6 +1368,20 @@ mod tests {
 
         console.memory.write(0xAF45 , 0x7A);
         console.inclusive_or_absolute();
+        assert_eq!(0xFB, console.cpu.a);
+    }
+
+    #[test]
+    fn inclusive_or_absolute_x_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+        console.cpu.x = 0x15;
+        console.cpu.program_counter = 0x1234;
+        console.memory.write(0x1234, 0x45);
+        console.memory.write(0x1235, 0xAF);
+
+        console.memory.write(0xAF45 + 0x15, 0x7A);
+        console.inclusive_or_absolute_x();
         assert_eq!(0xFB, console.cpu.a);
     }
 
