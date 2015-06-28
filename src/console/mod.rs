@@ -187,10 +187,20 @@ impl Console {
         self.memory.read(address as u16)
     }
 
-    fn read_zero_page_x(&mut self) -> u8 {
+    fn read_zero_page_with_offset(&mut self, offset: u16) -> u8 {
         self.cpu.wait_counter = 4;
-        let address = self.get_byte_operand() as u16 + self.cpu.x as u16;
+        let address = self.get_byte_operand() as u16 + offset;
         self.memory.read(address % 256)
+    }
+
+    fn read_zero_page_x(&mut self) -> u8 {
+        let offset = self.cpu.x as u16;
+        self.read_zero_page_with_offset(offset)
+    }
+
+    fn read_zero_page_y(&mut self) -> u8 {
+        let offset = self.cpu.y as u16;
+        self.read_zero_page_with_offset(offset)
     }
 
     fn set_load_flags(&mut self, value: u8) {
@@ -572,6 +582,31 @@ mod tests {
     }
 
     #[test]
+    fn read_zero_page_with_offset_returns_value_at_zero_page_with_offset() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+        console.memory.write(0x008F, 0xAE);
+        assert_eq!(0xAE, console.read_zero_page_with_offset(0x0F));
+    }
+
+    #[test]
+    fn read_zero_page_x_handles_wrap_around() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+        console.memory.write(0x007F, 0xAE);
+        assert_eq!(0xAE, console.read_zero_page_with_offset(0xFF));
+    }
+
+    #[test]
+    fn read_zero_page_with_offset_sets_wait_counter_to_4() {
+        let mut console = create_test_console();
+        console.read_zero_page_with_offset(0x00);
+        assert_eq!(4, console.cpu.wait_counter);
+    }
+
+    #[test]
     fn read_zero_page_x_returns_value_at_zero_page_pointed_by_program_counter_indexed_with_x() {
         let mut console = create_test_console();
         console.cpu.x = 0x0F;
@@ -582,22 +617,14 @@ mod tests {
     }
 
     #[test]
-    fn read_zero_page_x_handles_wrap_around() {
+    fn read_zero_page_y_returns_value_at_zero_page_pointed_by_program_counter_indexed_with_y() {
         let mut console = create_test_console();
-        console.cpu.x = 0xFF;
+        console.cpu.y = 0x0F;
         console.cpu.program_counter = 0x432;
         console.memory.write(0x432, 0x80);
-        console.memory.write(0x007F, 0xAE);
-        assert_eq!(0xAE, console.read_zero_page_x());
+        console.memory.write(0x008F, 0xAE);
+        assert_eq!(0xAE, console.read_zero_page_y());
     }
-
-    #[test]
-    fn read_zero_page_x_sets_wait_counter_to_4() {
-        let mut console = create_test_console();
-        console.read_zero_page_x();
-        assert_eq!(4, console.cpu.wait_counter);
-    }
-
 
     #[test]
     fn do_and_sets_accumulator_value_to_the_result() {
