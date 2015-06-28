@@ -146,12 +146,6 @@ impl Console {
         byte
     }
 
-    fn read_zero_page(&mut self) -> u8 {
-        self.cpu.wait_counter = 3;
-        let address = self.get_byte_operand();
-        self.memory.read(address as u16)
-    }
-
     fn read_immediate(&mut self) -> u8 {
         self.cpu.wait_counter = 2;
         self.get_byte_operand()
@@ -161,6 +155,18 @@ impl Console {
         self.cpu.wait_counter = 4;
         let address = self.get_2_byte_operand();
         self.memory.read(address)
+    }
+
+    fn read_zero_page(&mut self) -> u8 {
+        self.cpu.wait_counter = 3;
+        let address = self.get_byte_operand();
+        self.memory.read(address as u16)
+    }
+
+    fn read_zero_page_x(&mut self) -> u8 {
+        self.cpu.wait_counter = 4;
+        let address = self.get_byte_operand() as u16 + self.cpu.x as u16;
+        self.memory.read(address % 256)
     }
 
     fn set_load_flags(&mut self, value: u8) {
@@ -455,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn read_zero_page_returns_value_at_zero_pointed_by_program_counter() {
+    fn read_zero_page_returns_value_at_zero_page_pointed_by_program_counter() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0x432;
         console.memory.write(0x432, 0xFA);
@@ -468,6 +474,34 @@ mod tests {
         let mut console = create_test_console();
         console.read_zero_page();
         assert_eq!(3, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn read_zero_page_x_returns_value_at_zero_page_pointed_by_program_counter_indexed_with_x() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x0F;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+        console.memory.write(0x008F, 0xAE);
+        assert_eq!(0xAE, console.read_zero_page_x());
+    }
+
+
+    #[test]
+    fn read_zero_page_x_handles_wrap_around() {
+        let mut console = create_test_console();
+        console.cpu.x = 0xFF;
+        console.cpu.program_counter = 0x432;
+        console.memory.write(0x432, 0x80);
+        console.memory.write(0x007F, 0xAE);
+        assert_eq!(0xAE, console.read_zero_page_x());
+    }
+
+    #[test]
+    fn read_zero_page_x_sets_wait_counter_to_4() {
+        let mut console = create_test_console();
+        console.read_zero_page_x();
+        assert_eq!(4, console.cpu.wait_counter);
     }
 
     #[test]
