@@ -106,6 +106,7 @@ impl Console {
             57 => self.and_absolute_y(),
             61 => self.and_absolute_x(),
             72 => self.push_accumulator(),
+            73 => self.exclusive_or_immediate(),
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
             96 => self.return_from_subroutine(),
@@ -409,6 +410,11 @@ impl Console {
     fn inclusive_or_indirect_y(&mut self) {
         let value = self.read_indirect_y();
         self.do_inclusive_or(value);
+    }
+
+    fn exclusive_or_immediate(&mut self) {
+        let value = self.read_immediate();
+        self.do_exclusive_or(value);
     }
 
     fn branch_if_carry_clear(&mut self) {
@@ -805,6 +811,7 @@ mod tests {
         assert_eq!(4, console.cpu.wait_counter);
     }
 
+    #[test]
     fn read_absolute_with_offset_return_correct_value() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0x432;
@@ -1352,6 +1359,7 @@ mod tests {
         assert_eq!(0xFA, console.cpu.a);
     }
 
+    #[test]
     fn do_bit_test_does_not_modify_program_counter() {
         let mut console = create_test_console();
         console.cpu.program_counter = 0xCAFE;
@@ -1360,7 +1368,7 @@ mod tests {
     }
 
     #[test]
-    fn do_bit_test__sets_negative_flag_if_bit_is_set_and_flag_is_not_set() {
+    fn do_bit_test_sets_negative_flag_if_bit_is_set_and_flag_is_not_set() {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x08;
         console.cpu.a = 0x80;
@@ -1368,11 +1376,12 @@ mod tests {
         assert_eq!(0x88, console.cpu.status_flags);
     }
 
-    fn do_bit_test__sets_negative_flag_if_bit_is_set_in_memory_and_not_in_accumulator() {
+    #[test]
+    fn do_bit_test_sets_negative_flag_if_bit_is_set_in_memory_and_not_in_accumulator() {
         let mut console = create_test_console();
         console.cpu.status_flags = 0x08;
-        console.cpu.a = 0x00;
-        console.do_bit_test(0x80);
+        console.cpu.a = 0x01;
+        console.do_bit_test(0x81);
         assert_eq!(0x88, console.cpu.status_flags);
     }
 
@@ -1706,6 +1715,18 @@ mod tests {
         console.memory.write(0xAF45 + 0x15, 0x7A);
         console.inclusive_or_indirect_y();
         assert_eq!(0xFB, console.cpu.a);
+    }
+
+    #[test]
+    fn exclusive_or_immediate_sets_accumulator_correctly() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+
+        console.cpu.program_counter = 0xFF;
+        console.memory.write(0xFF, 0xAF);
+
+        console.exclusive_or_immediate();
+        assert_eq!(0x2E, console.cpu.a);
     }
 
     #[test]
