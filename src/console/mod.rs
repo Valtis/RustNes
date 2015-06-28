@@ -91,6 +91,7 @@ impl Console {
             48 => self.branch_if_minus_set(),
             53 => self.and_zero_page_x(),
             56 => self.set_carry_flag(),
+            61 => self.and_absolute_x(),
             72 => self.push_accumulator(),
             76 => self.jump_absolute(),
             80 => self.branch_if_overflow_clear(),
@@ -313,6 +314,11 @@ impl Console {
     fn set_carry_flag(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.status_flags = self.cpu.status_flags | 0x01;
+    }
+
+    fn and_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        self.do_and(value);
     }
 
     fn push_accumulator(&mut self) {
@@ -1160,7 +1166,6 @@ mod tests {
         assert_eq!(0x10, console.cpu.status_flags);
     }
 
-
     #[test]
     fn bit_test_zero_increments_pc_correctly() {
         let mut console = create_test_console();
@@ -1381,6 +1386,49 @@ mod tests {
         console.cpu.stack_pointer = 0xFF;
         console.set_carry_flag();
         assert_eq!(2, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn and_absolute_x_sets_accumulator_value_to_the_result() {
+        let mut console = create_test_console();
+        console.cpu.a = 0xE9;
+        console.cpu.x = 0x04;
+        console.cpu.program_counter = 0x52;
+        console.memory.write(0x52, 0x00);
+        console.memory.write(0x53, 0x80);
+        console.memory.write(0x8004, 0x3E);
+        console.and_absolute_x();
+        assert_eq!(0x28, console.cpu.a);
+    }
+
+    #[test]
+    fn and_absolute_x_increments_program_counter_twice() {
+        let mut console = create_test_console();
+        console.cpu.program_counter = 0x52;
+        console.and_absolute_x();
+        assert_eq!(0x54, console.cpu.program_counter);
+    }
+
+    #[test]
+    fn and_absolute_x_takes_4_cycles_if_page_boundary_is_not_crossed() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x04;
+        console.cpu.program_counter = 0x52;
+        console.memory.write(0x52, 0x00);
+        console.memory.write(0x53, 0x80);
+        console.and_absolute_x();
+        assert_eq!(4, console.cpu.wait_counter);
+    }
+
+    #[test]
+    fn and_absolute_x_takes_5_cycles_if_page_boundary_is_crossed() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x04;
+        console.cpu.program_counter = 0x52;
+        console.memory.write(0x52, 0xFF);
+        console.memory.write(0x53, 0x80);
+        console.and_absolute_x();
+        assert_eq!(5, console.cpu.wait_counter);
     }
 
     #[test]
