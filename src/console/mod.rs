@@ -271,12 +271,65 @@ impl Console {
         }
     }
 
-    fn push_status_flags_into_stack(&mut self) {
-        // This instruction sets bits 4 & 5 to 1 for the value that gets pushed into stack.
-        // In contrast, irq or nmi will set bit 4 to 0.
-        self.cpu.wait_counter = 3;
-        let flags = self.cpu.status_flags | 0x30;
-        self.push_value_into_stack(flags);
+
+    fn and_immediate(&mut self) {
+        let operand = self.read_immediate();
+        self.do_and(operand);
+    }
+
+    fn and_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        self.do_and(value);
+    }
+
+    fn and_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        self.do_and(value);
+    }
+
+    fn and_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        self.do_and(value);
+    }
+
+    fn and_absolute_y(&mut self) {
+        let value = self.read_absolute_y();
+        self.do_and(value);
+    }
+
+    fn branch_if_carry_clear(&mut self) {
+        let condition = self.cpu.status_flags & 0x01 == 0;
+        self.do_relative_jump_if(condition);
+    }
+
+    fn branch_if_carry_set(&mut self) {
+        let condition = self.cpu.status_flags & 0x01 != 0;
+        self.do_relative_jump_if(condition);
+    }
+
+    fn branch_if_equal(&mut self) {
+        let condition = self.cpu.status_flags & 0x02 != 0;
+        self.do_relative_jump_if(condition);
+    }
+
+    fn branch_if_not_equal(&mut self) {
+        let condition = self.cpu.status_flags & 0x02 == 0;
+        self.do_relative_jump_if(condition);
+    }
+
+    fn branch_if_minus_set(&mut self) {
+        let condition = self.cpu.status_flags & 0x80 != 0;
+        self.do_relative_jump_if(condition);
+    }
+
+    fn branch_if_overflow_clear(&mut self) {
+        let condition = self.cpu.status_flags & 0x40 == 0;
+        self.do_relative_jump_if(condition);
+    }
+
+    fn branch_if_overflow_set(&mut self) {
+        let condition = self.cpu.status_flags & 0x40 != 0;
+        self.do_relative_jump_if(condition);
     }
 
     fn branch_if_positive(&mut self) {
@@ -284,9 +337,9 @@ impl Console {
         self.do_relative_jump_if(condition);
     }
 
-    fn clear_carry_flag(&mut self) {
-        self.cpu.wait_counter = 2;
-        self.cpu.status_flags = self.cpu.status_flags & 0xFE; // clear bi 0
+    fn jump_absolute(&mut self) {
+        self.cpu.wait_counter = 3;
+        self.cpu.program_counter = self.get_2_byte_operand();
     }
 
     fn jump_to_subroutine(&mut self) {
@@ -299,6 +352,13 @@ impl Console {
         self.cpu.program_counter = address;
     }
 
+    fn return_from_subroutine(&mut self) {
+        self.cpu.wait_counter = 6;
+        let low_byte = self.pop_value_from_stack() as u16;
+        let high_byte = self.pop_value_from_stack() as u16;
+        self.cpu.program_counter = ((high_byte << 8) | low_byte) + 1;
+    }
+
     fn bit_test_zero_page(&mut self) {
         let operand = self.read_zero_page();
         let result = self.cpu.a & operand;
@@ -307,29 +367,9 @@ impl Console {
         self.set_zero_flag(result);
     }
 
-    fn and_zero_page(&mut self) {
-        let value = self.read_zero_page();
-        self.do_and(value);
-    }
-
-    fn pull_status_flags_from_stack(&mut self) {
-        self.cpu.wait_counter = 4;
-        self.cpu.status_flags = self.pop_value_from_stack() | 0x30;
-    }
-
-    fn and_immediate(&mut self) {
-        let operand = self.read_immediate();
-        self.do_and(operand);
-    }
-
-    fn branch_if_minus_set(&mut self) {
-        let condition = self.cpu.status_flags & 0x80 != 0;
-        self.do_relative_jump_if(condition);
-    }
-
-    fn and_zero_page_x(&mut self) {
-        let value = self.read_zero_page_x();
-        self.do_and(value);
+    fn clear_carry_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags & 0xFE; // clear bi 0
     }
 
     fn set_carry_flag(&mut self) {
@@ -337,37 +377,25 @@ impl Console {
         self.cpu.status_flags = self.cpu.status_flags | 0x01;
     }
 
-    fn and_absolute_y(&mut self) {
-        let value = self.read_absolute_y();
-        self.do_and(value);
+    fn clear_decimal_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear bit 3
     }
 
-    fn and_absolute_x(&mut self) {
-        let value = self.read_absolute_x();
-        self.do_and(value);
+    fn set_decimal_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags | 0x08; // set bit 3
+    }
+
+    fn set_interrupt_disable_flag(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.status_flags = self.cpu.status_flags | 0x04; // set bit 2
     }
 
     fn push_accumulator(&mut self) {
         self.cpu.wait_counter = 3;
         let value = self.cpu.a;
         self.push_value_into_stack(value);
-    }
-
-    fn jump_absolute(&mut self) {
-        self.cpu.wait_counter = 3;
-        self.cpu.program_counter = self.get_2_byte_operand();
-    }
-
-    fn branch_if_overflow_clear(&mut self) {
-        let condition = self.cpu.status_flags & 0x40 == 0;
-        self.do_relative_jump_if(condition);
-    }
-
-    fn return_from_subroutine(&mut self) {
-        self.cpu.wait_counter = 6;
-        let low_byte = self.pop_value_from_stack() as u16;
-        let high_byte = self.pop_value_from_stack() as u16;
-        self.cpu.program_counter = ((high_byte << 8) | low_byte) + 1;
     }
 
     fn pull_accumulator(&mut self) {
@@ -377,39 +405,17 @@ impl Console {
         self.set_zero_flag(value);
     }
 
-    fn branch_if_overflow_set(&mut self) {
-        let condition = self.cpu.status_flags & 0x40 != 0;
-        self.do_relative_jump_if(condition);
+    fn push_status_flags_into_stack(&mut self) {
+        // This instruction sets bits 4 & 5 to 1 for the value that gets pushed into stack.
+        // In contrast, irq or nmi will set bit 4 to 0.
+        self.cpu.wait_counter = 3;
+        let flags = self.cpu.status_flags | 0x30;
+        self.push_value_into_stack(flags);
     }
 
-    fn set_interrupt_disable_flag(&mut self) {
-        self.cpu.wait_counter = 2;
-        self.cpu.status_flags = self.cpu.status_flags | 0x04; // set bit 2
-    }
-
-    fn store_a_zero_page(&mut self) {
-        let value = self.cpu.a;
-        self.do_zero_page_store(value);
-    }
-
-    fn store_x_zero_page(&mut self) {
-        let value = self.cpu.x;
-        self.do_zero_page_store(value);
-    }
-
-    fn branch_if_carry_clear(&mut self) {
-        let condition = self.cpu.status_flags & 0x01 == 0;
-        self.do_relative_jump_if(condition);
-    }
-
-    fn transfer_x_to_stack_pointer(&mut self) {
-        self.cpu.wait_counter = 2;
-        self.cpu.stack_pointer = self.cpu.x;
-    }
-
-    fn load_x_immediate(&mut self) {
-        let value = self.read_immediate();
-        self.load_x(value);
+    fn pull_status_flags_from_stack(&mut self) {
+        self.cpu.wait_counter = 4;
+        self.cpu.status_flags = self.pop_value_from_stack() | 0x30;
     }
 
     fn load_a_immediate(&mut self) {
@@ -422,9 +428,24 @@ impl Console {
         self.load_a(value);
     }
 
-    fn branch_if_carry_set(&mut self) {
-        let condition = self.cpu.status_flags & 0x01 != 0;
-        self.do_relative_jump_if(condition);
+    fn store_a_zero_page(&mut self) {
+        let value = self.cpu.a;
+        self.do_zero_page_store(value);
+    }
+
+    fn load_x_immediate(&mut self) {
+        let value = self.read_immediate();
+        self.load_x(value);
+    }
+
+    fn store_x_zero_page(&mut self) {
+        let value = self.cpu.x;
+        self.do_zero_page_store(value);
+    }
+
+    fn transfer_x_to_stack_pointer(&mut self) {
+        self.cpu.wait_counter = 2;
+        self.cpu.stack_pointer = self.cpu.x;
     }
 
     fn compare_immediate(&mut self) {
@@ -439,28 +460,8 @@ impl Console {
 
     }
 
-    fn branch_if_not_equal(&mut self) {
-        let condition = self.cpu.status_flags & 0x02 == 0;
-        self.do_relative_jump_if(condition);
-    }
-
-    fn clear_decimal_flag(&mut self) {
-        self.cpu.wait_counter = 2;
-        self.cpu.status_flags = self.cpu.status_flags & 0xF7; // clear bit 3
-    }
-
     fn no_operation(&mut self) {
         self.cpu.wait_counter = 2;
-    }
-
-    fn branch_if_equal(&mut self) {
-        let condition = self.cpu.status_flags & 0x02 != 0;
-        self.do_relative_jump_if(condition);
-    }
-
-    fn set_decimal_flag(&mut self) {
-        self.cpu.wait_counter = 2;
-        self.cpu.status_flags = self.cpu.status_flags | 0x08; // set bit 3
     }
 }
 
