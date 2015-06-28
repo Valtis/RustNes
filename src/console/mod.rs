@@ -105,6 +105,7 @@ impl Console {
             56 => self.set_carry_flag(),
             57 => self.and_absolute_y(),
             61 => self.and_absolute_x(),
+            69 => self.exclusive_or_zero_page(),
             72 => self.push_accumulator(),
             73 => self.exclusive_or_immediate(),
             76 => self.jump_absolute(),
@@ -414,6 +415,11 @@ impl Console {
 
     fn exclusive_or_immediate(&mut self) {
         let value = self.read_immediate();
+        self.do_exclusive_or(value);
+    }
+
+    fn exclusive_or_zero_page(&mut self) {
+        let value = self.read_zero_page();
         self.do_exclusive_or(value);
     }
 
@@ -1577,7 +1583,7 @@ mod tests {
     }
 
     #[test]
-    fn and_indirect_x_sets_accumulator_correctly() {
+    fn and_indirect_x_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0xE9;
         console.cpu.x = 0x04;
@@ -1595,7 +1601,7 @@ mod tests {
 
 
     #[test]
-    fn and_indirect_y_sets_accumulator_correctly() {
+    fn and_indirect_y_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0xE9;
         console.cpu.y = 0x04;
@@ -1612,7 +1618,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_immediate_sets_accumulator_correctly() {
+    fn inclusive_or_immediate_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.program_counter = 0x1234;
@@ -1622,7 +1628,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_zero_page_sets_accumulator_correctly() {
+    fn inclusive_or_zero_page_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.program_counter = 0x1234;
@@ -1633,7 +1639,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_zero_page_x_sets_accumulator_correctly() {
+    fn inclusive_or_zero_page_x_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.x = 0x10;
@@ -1645,7 +1651,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_absolute_sets_accumulator_correctly() {
+    fn inclusive_or_absolute_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.program_counter = 0x1234;
@@ -1658,7 +1664,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_absolute_x_sets_accumulator_correctly() {
+    fn inclusive_or_absolute_x_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.x = 0x15;
@@ -1672,7 +1678,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_absolute_y_sets_accumulator_correctly() {
+    fn inclusive_or_absolute_y_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.y = 0x15;
@@ -1686,7 +1692,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_indirect_x_sets_accumulator_correctly() {
+    fn inclusive_or_indirect_x_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.x = 0x15;
@@ -1702,7 +1708,7 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_or_indirect_y_sets_accumulator_correctly() {
+    fn inclusive_or_indirect_y_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
         console.cpu.y = 0x15;
@@ -1718,7 +1724,7 @@ mod tests {
     }
 
     #[test]
-    fn exclusive_or_immediate_sets_accumulator_correctly() {
+    fn exclusive_or_immediate_sets_correct_value_into_accumulator() {
         let mut console = create_test_console();
         console.cpu.a = 0x81;
 
@@ -1726,6 +1732,19 @@ mod tests {
         console.memory.write(0xFF, 0xAF);
 
         console.exclusive_or_immediate();
+        assert_eq!(0x2E, console.cpu.a);
+    }
+
+    #[test]
+    fn exclusive_or_zero_page_sets_correct_value_into_accumulator() {
+        let mut console = create_test_console();
+        console.cpu.a = 0x81;
+
+        console.cpu.program_counter = 0xFF;
+        console.memory.write(0xFF, 0x29);
+        console.memory.write(0x29, 0xAF);
+
+        console.exclusive_or_zero_page();
         assert_eq!(0x2E, console.cpu.a);
     }
 
