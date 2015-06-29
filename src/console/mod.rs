@@ -124,11 +124,17 @@ impl Console {
             134 => self.store_x_zero_page(),
             144 => self.branch_if_carry_clear(),
             154 => self.transfer_x_to_stack_pointer(),
+            161 => self.load_a_indirect_x(),
             162 => self.load_x_immediate(),
+            165 => self.load_a_zero_page(),
             169 => self.load_a_immediate(),
             173 => self.load_a_absolute(),
             176 => self.branch_if_carry_set(),
+            177 => self.load_a_indirect_y(),
+            181 => self.load_a_zero_page_x(),
             184 => self.clear_overflow_flag(),
+            185 => self.load_a_absolute_y(),
+            189 => self.load_a_absolute_x(),
             201 => self.compare_immediate(),
             208 => self.branch_if_not_equal(),
             216 => self.clear_decimal_flag(),
@@ -592,8 +598,38 @@ impl Console {
         self.load_a(value);
     }
 
+    fn load_a_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        self.load_a(value);
+    }
+
+    fn load_a_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        self.load_a(value);
+    }
+
     fn load_a_absolute(&mut self) {
         let value = self.read_absolute();
+        self.load_a(value);
+    }
+
+    fn load_a_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        self.load_a(value);
+    }
+
+    fn load_a_absolute_y(&mut self) {
+        let value = self.read_absolute_y();
+        self.load_a(value);
+    }
+
+    fn load_a_indirect_x(&mut self) {
+        let value = self.read_indirect_x();
+        self.load_a(value);
+    }
+
+    fn load_a_indirect_y(&mut self) {
+        let value = self.read_indirect_y();
         self.load_a(value);
     }
 
@@ -2548,10 +2584,26 @@ mod tests {
     }
 
     #[test]
-    fn load_a_immediate_sets_wait_counter_correctly() {
+    fn load_a_zero_page_sets_a_to_a_correct_value() {
         let mut console = create_test_console();
-        console.load_a_immediate();
-        assert_eq!(2, console.cpu.wait_counter);
+
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0x23);
+        console.memory.write(0x23, 0xFA);
+        console.load_a_zero_page();
+        assert_eq!(0xFA, console.cpu.a);
+    }
+
+    #[test]
+    fn load_a_zero_page_x_sets_a_to_a_correct_value() {
+        let mut console = create_test_console();
+
+        console.cpu.x = 0x12;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0x23);
+        console.memory.write(0x23 + 0x12, 0xFA);
+        console.load_a_zero_page_x();
+        assert_eq!(0xFA, console.cpu.a);
     }
 
     #[test]
@@ -2566,14 +2618,65 @@ mod tests {
         assert_eq!(42, console.cpu.a);
     }
 
-
     #[test]
-    fn load_a_absolute_sets_wait_counter_correctly() {
+    fn load_a_absolute_x_loads_correct_value_from_memory() {
         let mut console = create_test_console();
-        console.load_a_absolute();
-        assert_eq!(4, console.cpu.wait_counter);
+        console.cpu.x = 0x14;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1 + 0x14, 42);
+
+        console.load_a_absolute_x();
+        assert_eq!(42, console.cpu.a);
     }
 
+    #[test]
+    fn load_a_absolute_y_loads_correct_value_from_memory() {
+        let mut console = create_test_console();
+        console.cpu.y = 0x14;
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+        console.memory.write(26, 0xF0);
+        console.memory.write(0xF0B1 + 0x14, 42);
+
+        console.load_a_absolute_y();
+        assert_eq!(42, console.cpu.a);
+    }
+
+    #[test]
+    fn load_a_indirect_x_loads_correct_value_from_memory() {
+        let mut console = create_test_console();
+        console.cpu.x = 0x14;
+
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+
+        console.memory.write(0xB1 + 0x14, 0xEF);
+        console.memory.write(0xB1 + 0x14 + 1, 0x02);
+
+        console.memory.write(0x02EF, 0xAF);
+
+        console.load_a_indirect_x();
+        assert_eq!(0xAF, console.cpu.a);
+    }
+
+    #[test]
+    fn load_a_indirect_y_loads_correct_value_from_memory() {
+        let mut console = create_test_console();
+        console.cpu.y = 0x14;
+
+        console.cpu.program_counter = 25;
+        console.memory.write(25, 0xB1);
+
+        console.memory.write(0xB1, 0xEF);
+        console.memory.write(0xB1 + 1, 0x02);
+
+        console.memory.write(0x02EF + 0x14, 0xAF);
+
+        console.load_a_indirect_y();
+        assert_eq!(0xAF, console.cpu.a);
+    }
     #[test]
     fn store_a_zero_page_stores_value_into_memory_correctly() {
         let mut console = create_test_console();
