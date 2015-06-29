@@ -779,6 +779,16 @@ impl Console {
         self.do_zero_page_store(value);
     }
 
+    fn store_x_zero_page_y(&mut self) {
+        let value = self.cpu.x;
+        self.do_zero_page_y_store(value);
+    }
+
+    fn store_x_absolute(&mut self) {
+        let value = self.cpu.x;
+        self.do_absolute_store(value);
+    }
+
     fn transfer_x_to_stack_pointer(&mut self) {
         self.cpu.wait_counter = 2;
         self.cpu.stack_pointer = self.cpu.x;
@@ -3281,17 +3291,26 @@ mod tests {
     }
 
     #[test]
-    fn store_x_zero_page_increments_pc_correctly() {
+    fn store_x_zero_page_y_stores_value_into_memory_correctly() {
         let mut console = create_test_console();
-        console.store_x_zero_page();
-        assert_eq!(1, console.cpu.program_counter);
+        console.cpu.x = 0x2f;
+        console.cpu.y = 0x53;
+        console.cpu.program_counter = 0x32;
+        console.memory.write(0x32, 0x14);
+        console.store_x_zero_page_y();
+        assert_eq!(0x2f, console.memory.read(0x14 + 0x53));
     }
 
     #[test]
-    fn store_x_zero_page_takes_3_cycles() {
+    fn store_x_absolute_stores_value_into_memory_correctly() {
         let mut console = create_test_console();
-        console.store_x_zero_page();
-        assert_eq!(3, console.cpu.wait_counter);
+        console.cpu.x = 0x2f;
+        console.cpu.program_counter = 0x32;
+        console.memory.write(0x32, 0x14);
+        console.memory.write(0x33, 0x08);
+
+        console.store_x_absolute();
+        assert_eq!(0x2f, console.memory.read(0x0814));
     }
 
     #[test]
