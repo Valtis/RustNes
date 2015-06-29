@@ -754,6 +754,26 @@ impl Console {
         self.load_x(value);
     }
 
+    fn load_x_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        self.load_x(value);
+    }
+
+    fn load_x_zero_page_y(&mut self) {
+        let value = self.read_zero_page_y();
+        self.load_x(value);
+    }
+
+    fn load_x_absolute(&mut self) {
+        let value = self.read_absolute();
+        self.load_x(value);
+    }
+
+    fn load_x_absolute_y(&mut self) {
+        let value = self.read_absolute_y();
+        self.load_x(value);
+    }
+
     fn store_x_zero_page(&mut self) {
         let value = self.cpu.x;
         self.do_zero_page_store(value);
@@ -3195,10 +3215,59 @@ mod tests {
     }
 
     #[test]
-    fn load_x_immediate_sets_wait_counter_correctly() {
+    fn load_x_zero_page_sets_x_to_correct_value() {
         let mut console = create_test_console();
-        console.load_x_immediate();
-        assert_eq!(2, console.cpu.wait_counter);
+
+        console.cpu.program_counter = 0x25;
+        console.memory.write(0x25, 0xBE);
+
+        console.memory.write(0xBE, 0x09);
+
+        console.load_x_zero_page();
+        assert_eq!(0x09, console.cpu.x);
+    }
+
+    #[test]
+    fn load_x_zero_page_y_sets_x_to_correct_value() {
+        let mut console = create_test_console();
+
+        console.cpu.y = 0x13;
+        console.cpu.program_counter = 0x25;
+        console.memory.write(0x25, 0xBE);
+
+        console.memory.write(0xBE + 0x13, 0x09);
+
+        console.load_x_zero_page_y();
+        assert_eq!(0x09, console.cpu.x);
+    }
+
+    #[test]
+    fn load_x_absolute_sets_x_to_correct_value() {
+        let mut console = create_test_console();
+
+        console.cpu.program_counter = 0x25;
+        console.memory.write(0x25, 0xBE);
+        console.memory.write(0x26, 0xAB);
+
+        console.memory.write(0xABBE, 0x09);
+
+        console.load_x_absolute();
+        assert_eq!(0x09, console.cpu.x);
+    }
+
+    #[test]
+    fn load_x_absolute_y_sets_x_to_correct_value() {
+        let mut console = create_test_console();
+
+        console.cpu.y = 0x13;
+        console.cpu.program_counter = 0x25;
+        console.memory.write(0x25, 0xBE);
+        console.memory.write(0x26, 0xAB);
+
+        console.memory.write(0xABBE + 0x13, 0x09);
+
+        console.load_x_absolute_y();
+        assert_eq!(0x09, console.cpu.x);
     }
 
     #[test]
