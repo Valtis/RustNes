@@ -1,16 +1,20 @@
 use rom::Rom;
 
+// Badly unfinished. Consider this to be a placeholder for now.
 
+#[derive(Debug)]
 pub struct Memory {
     rom: Rom,
-    memory: [u8; 0xffff + 1],
+    memory: Vec<u8>,
 }
 
 impl Memory {
     pub fn new() -> Memory {
+        let mem = vec![0;0xFFFF + 1];
+
         Memory {
             rom: Rom::new(),
-            memory: [0; 0xffff + 1],
+            memory: mem,
         }
     }
 
