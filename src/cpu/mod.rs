@@ -413,6 +413,39 @@ impl Cpu {
         self.set_zero_flag(result);
     }
 
+    fn do_add(&mut self, operand: u8) {
+        let mut result = self.a as u16 + operand as u16;
+
+        // if carry is set, add 1 to result
+        if self.status_flags & 0x01 == 0x01 {
+            result += 1;
+        }
+
+        // clear carry, negative, overflow and zero flags
+        self.status_flags = self.status_flags & 0x3C;
+
+        // set zero flag if result is zero
+        // important: do before casting to u8; if bit 9 is set
+        // result is not considered to be zero
+        if result == 0 {
+            self.status_flags = self.status_flags | 0x02;
+        }
+        // if bit 7 is not same in accumulator and result, set oveflow flag
+        if (result & 0x80) as u8 != self.a & 0x80 {
+            self.status_flags = self.status_flags | 0x40;
+        }
+
+        // if result is greater than 255, set carry flag
+        if result > 255 {
+            self.status_flags = self.status_flags | 0x01;
+        }
+
+        // finally set negative flag if necessary
+        self.set_negative_flag(result as u8);
+
+        self.a = result as u8;
+    }
+
     fn and_immediate(&mut self) {
         let operand = self.read_immediate();
         self.do_and(operand);
@@ -2134,6 +2167,196 @@ mod tests {
     }
 
     #[test]
+    fn do_add_sets_zero_flag_if_accumulator_and_operand_are_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 0;
+
+        cpu.do_add(0);
+
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+     #[test]
+    fn do_add_does_not_set_zero_flag_if_accumulator_and_operand_are_zero_but_carry_is_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 0;
+        cpu.do_add(0);
+
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_add_does_not_set_zero_flag_on_overflow() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 1;
+        cpu.do_add(255);
+
+        assert_eq!(0x00, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_add_does_nothing_if_zero_flag_is_set_and_accumulator_and_operand_are_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x02;
+        cpu.a = 0;
+
+        cpu.do_add(0);
+
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_add_unsets_zero_flag_if_flag_is_set_and_result_is_not_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x02;
+        cpu.a = 40;
+
+        cpu.do_add(5);
+
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_add_adds_two_small_numbers_together_and_stores_result_in_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 12;
+
+        cpu.do_add(10);
+
+        assert_eq!(22, cpu.a);
+    }
+
+    #[test]
+    fn do_add_adds_two_small_numbers_together_and_does_not_set_any_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 22;
+
+        cpu.do_add(10);
+
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_add_with_large_enough_numbers_to_cause_overflow_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 90;
+        // result is larger than signed 8 bit integer can hold; overflows into negative signed number
+        cpu.do_add(70);
+
+        // however we interpret the numbers as unsigned numbers and can just use positive numbers
+        assert_eq!(160, cpu.a);
+    }
+
+    #[test]
+    fn do_add_with_large_enough_numbers_to_cause_overflow_sets_overflow_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 70;
+        // result is larger than signed 8 bit integer can hold; overflows into negative signed number
+        cpu.do_add(90);
+
+        // should set negative flag as well but not in scope for this one
+        assert_eq!(0x40, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_add_sets_overflow_flag_if_negative_number_overflows_into_positive() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 200;
+        cpu.do_add(70);
+
+        assert_eq!(0x40, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_add_with_unsets_overflow_flag_if_result_does_not_overflow() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x40;
+        cpu.a = 10;
+        cpu.do_add(90);
+
+        // however we interpret the numbers as unsigned numbers
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_add_sets_negative_flag_if_result_is_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 10;
+        cpu.do_add(180); // unsigned 180 -> (180 - 256) = -76 as signed
+
+        assert_eq!(0x80, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn do_add_sets_negative_flag_if_result_is_negative_after_overflow() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 70;
+        cpu.do_add(90);
+
+        assert_eq!(0x80, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn do_add_unset_negative_flag_if_result_is_not_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x80;
+        cpu.a = 70;
+        cpu.do_add(200);
+
+        assert_eq!(0x00, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn do_add_stores_lowest_8_bits_in_accumulator_if_result_is_too_large_to_fit_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x80;
+        cpu.a = 70;
+        cpu.do_add(200);
+
+        assert_eq!(14, cpu.a);
+    }
+
+    #[test]
+    fn do_add_sets_carry_flag_if_result_is_too_large_to_fit_8_bytes() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 70;
+        cpu.do_add(200);
+
+        assert_eq!(0x01, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn do_add_clears_carry_flag_if_result_fits_in_8_bytes() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 40;
+        cpu.do_add(200);
+
+        assert_eq!(0x00, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn do_add_adds_the_carry_flag_to_result_if_it_is_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 40;
+        cpu.do_add(200);
+
+        assert_eq!(241, cpu.a);
+    }
+
+    #[test]
     fn and_immediate_sets_accumulator_value_to_the_result() {
         let mut cpu = create_test_cpu();
         cpu.a = 0xE9;
@@ -3838,6 +4061,7 @@ mod tests {
         cpu.compare_indirect_y();
         assert_eq!(0x80, cpu.status_flags);
     }
+
 
     #[test]
     fn no_operation_waits_2_cycles() {
