@@ -1,6 +1,6 @@
 extern crate time;
 
-use memory::Memory;
+use memory::*;
 use cpu::Cpu;
 use rom::read_rom;
 

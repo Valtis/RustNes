@@ -1,8 +1,9 @@
-extern crate nes;
-
-use nes::console::Console;
+mod console;
+mod cpu;
+mod memory;
+mod rom;
 
 fn main() {
-    let mut console = Console::new("nestest.nes");
+    let mut console = console::Console::new("nestest.nes");
     console.execute();
 }
