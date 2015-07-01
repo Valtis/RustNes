@@ -1,12 +1,12 @@
 use rom::TvSystem;
 use memory::Memory;
 use std::rc::Rc;
-
+use std::cell::RefCell;
 
 
 #[derive(Debug)]
 pub struct Cpu {
-    memory: Rc<Memory>, // reference to memory, so that cpu can use it
+    memory: Rc<RefCell<Memory>>, // reference to memory, so that cpu can use it
     pub frequency: Frequency,
     pub program_counter:u16,
     pub stack_pointer:u8,
@@ -18,7 +18,7 @@ pub struct Cpu {
 }
 
 impl Cpu {
-    pub fn new(tv_system: &TvSystem, memory: Rc<Memory>) -> Cpu {
+    pub fn new(tv_system: &TvSystem, memory: Rc<RefCell<Memory>>) -> Cpu {
         Cpu {
             memory: memory,
             frequency: Frequency::new(&tv_system),
@@ -39,10 +39,10 @@ impl Cpu {
 
     pub fn execute_instruction(&mut self) {
 
-        let instruction = self.memory.read(self.program_counter);
+        let instruction = self.memory.borrow_mut().read(self.program_counter);
         self.program_counter += 1;
         match instruction {
-    /*        1 => self.inclusive_or_indirect_x(),
+            1 => self.inclusive_or_indirect_x(),
             5 => self.inclusive_or_zero_page(),
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
@@ -121,12 +121,12 @@ impl Cpu {
             221 => self.compare_absolute_x(),
             234 => self.no_operation(),
             240 => self.branch_if_equal(),
-            248 => self.set_decimal_flag(),*/
+            248 => self.set_decimal_flag(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.program_counter - 1, self),
         }
     }
-/*    fn set_negative_flag(&mut self, value: u8) {
+    fn set_negative_flag(&mut self, value: u8) {
         self.status_flags = (self.status_flags & 0x7F) | (value & 0x80);
     }
 
@@ -141,7 +141,7 @@ impl Cpu {
     }
 
     fn get_byte_operand(&mut self) -> u8 {
-        let byte = self.memory.unwrap().read(self.program_counter);
+        let byte = self.memory.borrow_mut().read(self.program_counter);
         self.program_counter += 1;
         byte
     }
@@ -155,9 +155,9 @@ impl Cpu {
     }
 
     fn get_absolute_address(&mut self) -> u16 {
-        let low_byte = self.memory.unwrap().read(self.program_counter);
+        let low_byte = self.memory.borrow_mut().read(self.program_counter);
         self.program_counter += 1;
-        let high_byte = self.memory.unwrap().read(self.program_counter);
+        let high_byte = self.memory.borrow_mut().read(self.program_counter);
         self.program_counter += 1;
 
          ((high_byte as u16) << 8) | low_byte as u16
@@ -169,16 +169,16 @@ impl Cpu {
 
     fn get_indirect_x_address(&mut self) -> u16 {
         let zero_page_address = self.get_byte_operand() as u16;
-        let low_byte = self.memory.unwrap().read((zero_page_address + self.x as u16) & 0x00FF) as u16;
-        let high_byte = self.memory.unwrap().read((zero_page_address + self.x as u16 + 1) & 0x00FF) as u16;
+        let low_byte = self.memory.borrow_mut().read((zero_page_address + self.x as u16) & 0x00FF) as u16;
+        let high_byte = self.memory.borrow_mut().read((zero_page_address + self.x as u16 + 1) & 0x00FF) as u16;
         (high_byte << 8) | low_byte
     }
 
     fn get_indirect_y_address(&mut self) -> u16 {
         let zero_page_address =  self.get_byte_operand() as u16;
 
-        let low_byte = self.memory.unwrap().read(zero_page_address) as u16;
-        let high_byte = self.memory.unwrap().read((zero_page_address + 1) & 0x00FF) as u16;
+        let low_byte = self.memory.borrow_mut().read(zero_page_address) as u16;
+        let high_byte = self.memory.borrow_mut().read((zero_page_address + 1) & 0x00FF) as u16;
 
         let base_address = (high_byte << 8) | low_byte;
         let four_byte_address = base_address as u32 + self.y as u32;
@@ -194,7 +194,7 @@ impl Cpu {
     fn read_absolute(&mut self) -> u8 {
         self.wait_counter = 4;
         let address = self.get_absolute_address();
-        self.memory.unwrap().read(address)
+        self.memory.borrow_mut().read(address)
     }
 
     fn read_absolute_with_offset(&mut self, offset: u16) -> u8 {
@@ -206,7 +206,7 @@ impl Cpu {
         } else {
             self.wait_counter = 5;
         }
-        self.memory.unwrap().read(address)
+        self.memory.borrow_mut().read(address)
     }
 
     fn read_absolute_x(&mut self) -> u8 {
@@ -222,13 +222,13 @@ impl Cpu {
     fn read_zero_page(&mut self) -> u8 {
         self.wait_counter = 3;
         let address = self.get_zero_page_address();
-        self.memory.unwrap().read(address as u16)
+        self.memory.borrow_mut().read(address as u16)
     }
 
     fn read_zero_page_with_offset(&mut self, offset: u16) -> u8 {
         self.wait_counter = 4;
         let address = self.get_zero_page_address_with_offset(offset);
-        self.memory.unwrap().read(address)
+        self.memory.borrow_mut().read(address)
     }
 
     fn read_zero_page_x(&mut self) -> u8 {
@@ -244,7 +244,7 @@ impl Cpu {
     fn read_indirect_x(&mut self) -> u8 {
         self.wait_counter = 6;
         let address = self.get_indirect_x_address();
-        self.memory.unwrap().read(address)
+        self.memory.borrow_mut().read(address)
     }
     // duplicates get_indirect_y_address_code because timing depends on whether
     // the base address and final address are on the same page or not.
@@ -252,8 +252,8 @@ impl Cpu {
     fn read_indirect_y(&mut self) -> u8 {
         let zero_page_address =  self.get_byte_operand() as u16;
 
-        let low_byte = self.memory.unwrap().read(zero_page_address) as u16;
-        let high_byte = self.memory.unwrap().read((zero_page_address + 1) & 0x00FF) as u16;
+        let low_byte = self.memory.borrow_mut().read(zero_page_address) as u16;
+        let high_byte = self.memory.borrow_mut().read((zero_page_address + 1) & 0x00FF) as u16;
 
         let base_address = (high_byte << 8) | low_byte;
         let four_byte_address =  base_address as u32 + self.y as u32;
@@ -266,7 +266,7 @@ impl Cpu {
             self.wait_counter = 6;
         }
 
-        self.memory.unwrap().read(final_address)
+        self.memory.borrow_mut().read(final_address)
     }
 
     fn set_load_flags(&mut self, value: u8) {
@@ -292,63 +292,63 @@ impl Cpu {
     fn do_zero_page_store(&mut self, value: u8) {
         self.wait_counter = 3;
         let address = self.get_zero_page_address();
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_zero_page_x_store(&mut self, value: u8) {
         let offset = self.x as u16;
         self.wait_counter = 4;
         let address = self.get_zero_page_address_with_offset(offset);
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_zero_page_y_store(&mut self, value: u8) {
         let offset = self.y as u16;
         self.wait_counter = 4;
         let address = self.get_zero_page_address_with_offset(offset);
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_absolute_store(&mut self, value: u8) {
         self.wait_counter = 4;
         let address = self.get_absolute_address();
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_absolute_x_store(&mut self, value: u8) {
         self.wait_counter = 5;
         let offset = self.x as u16;
         let address = self.get_absolute_address_with_offset(offset);
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_absolute_y_store(&mut self, value: u8) {
         self.wait_counter = 5;
         let offset = self.y as u16;
         let address = self.get_absolute_address_with_offset(offset);
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_indirect_x_store(&mut self, value: u8) {
         self.wait_counter = 6;
         let address = self.get_indirect_x_address();
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn do_indirect_y_store(&mut self, value: u8) {
         self.wait_counter = 6;
         let address = self.get_indirect_y_address();
-        self.memory.unwrap().write(address, value);
+        self.memory.borrow_mut().write(address, value);
     }
 
     fn push_value_into_stack(&mut self, value: u8) {
-        self.memory.unwrap().write(0x0100 + self.stack_pointer as u16, value);
+        self.memory.borrow_mut().write(0x0100 + self.stack_pointer as u16, value);
         self.stack_pointer -= 1;
     }
 
     fn pop_value_from_stack(&mut self) -> u8 {
         self.stack_pointer += 1;
-        self.memory.unwrap().read(0x0100 + self.stack_pointer as u16)
+        self.memory.borrow_mut().read(0x0100 + self.stack_pointer as u16)
     }
 
     fn do_and(&mut self, operand: u8) {
@@ -823,7 +823,7 @@ impl Cpu {
 
     fn no_operation(&mut self) {
         self.wait_counter = 2;
-    }*/
+    }
 }
 #[derive(Debug)]
 pub struct Frequency {
@@ -865,15 +865,18 @@ impl Frequency {
 }
 
 
-/*
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use memory::Memory;
     use rom::TvSystem;
+    use std::rc::Rc;
+    use std::cell::RefCell;
 
     fn create_test_cpu() -> Cpu {
-        get_cpu(&TvSystem::NTSC)
+        let memory = Rc::new(RefCell::new(Memory::new()));
+        Cpu::new(&TvSystem::NTSC, memory)
     }
 
     #[test]
@@ -944,7 +947,7 @@ mod tests {
     fn get_byte_operand_gets_correct_value_and_updates_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 24;
-        cpu.memory.write(24, 0xAD);
+        cpu.memory.borrow_mut().write(24, 0xAD);
         assert_eq!(0xAD, cpu.get_byte_operand());
         assert_eq!(25, cpu.program_counter);
     }
@@ -954,7 +957,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.stack_pointer = 0xFF;
         cpu.push_value_into_stack(23);
-        assert_eq!(23, cpu.memory.read(0x01FF));
+        assert_eq!(23, cpu.memory.borrow_mut().read(0x01FF));
     }
 
     #[test]
@@ -969,7 +972,7 @@ mod tests {
     fn pop_value_from_stack_returns_correct_value() {
         let mut cpu = create_test_cpu();
         cpu.stack_pointer = 0xCC;
-        cpu.memory.write(0x0100 + 0xCD, 123);
+        cpu.memory.borrow_mut().write(0x0100 + 0xCD, 123);
         assert_eq!(123, cpu.pop_value_from_stack());
     }
 
@@ -1040,7 +1043,7 @@ mod tests {
     fn get_zero_page_address_returns_correct_address() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
-        cpu.memory.write(0x243, 0xAF);
+        cpu.memory.borrow_mut().write(0x243, 0xAF);
         assert_eq!(0x00AF, cpu.get_zero_page_address());
     }
 
@@ -1048,7 +1051,7 @@ mod tests {
     fn get_zero_page_address_with_offset_returns_correct_address_when_value_does_not_wrap_around() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
-        cpu.memory.write(0x243, 0xAF);
+        cpu.memory.borrow_mut().write(0x243, 0xAF);
         assert_eq!(0x00AF + 0x12, cpu.get_zero_page_address_with_offset(0x12));
     }
 
@@ -1056,7 +1059,7 @@ mod tests {
     fn get_zero_page_address_with_offset_returns_correct_address_when_value_wraps_around() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
-        cpu.memory.write(0x243, 0xFF);
+        cpu.memory.borrow_mut().write(0x243, 0xFF);
         assert_eq!(0x0011, cpu.get_zero_page_address_with_offset(0x12));
     }
 
@@ -1064,8 +1067,8 @@ mod tests {
     fn get_absolute_address_returns_correct_address() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
-        cpu.memory.write(0x243, 0xBE);
-        cpu.memory.write(0x244, 0xBA);
+        cpu.memory.borrow_mut().write(0x243, 0xBE);
+        cpu.memory.borrow_mut().write(0x244, 0xBA);
         assert_eq!(0xBABE, cpu.get_absolute_address());
     }
 
@@ -1073,8 +1076,8 @@ mod tests {
     fn get_absolute_address_with_offset_returns_correct_address() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
-        cpu.memory.write(0x243, 0xBE);
-        cpu.memory.write(0x244, 0xBA);
+        cpu.memory.borrow_mut().write(0x243, 0xBE);
+        cpu.memory.borrow_mut().write(0x244, 0xBA);
         assert_eq!(0xBABE + 0x43, cpu.get_absolute_address_with_offset(0x43));
     }
 
@@ -1083,10 +1086,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
         cpu.x = 0x25;
-        cpu.memory.write(0x243, 0xBE);
+        cpu.memory.borrow_mut().write(0x243, 0xBE);
 
-        cpu.memory.write(0xBE + 0x25 , 0xBA);
-        cpu.memory.write(0xBE + 0x25 + 1, 0xAF);
+        cpu.memory.borrow_mut().write(0xBE + 0x25 , 0xBA);
+        cpu.memory.borrow_mut().write(0xBE + 0x25 + 1, 0xAF);
 
         assert_eq!(0xAFBA, cpu.get_indirect_x_address());
     }
@@ -1096,10 +1099,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
         cpu.x = 0x1;
-        cpu.memory.write(0x243, 0xFE);
+        cpu.memory.borrow_mut().write(0x243, 0xFE);
 
-        cpu.memory.write(0xFF, 0xBA);
-        cpu.memory.write(0x00, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0xBA);
+        cpu.memory.borrow_mut().write(0x00, 0xAF);
 
         assert_eq!(0xAFBA, cpu.get_indirect_x_address());
     }
@@ -1109,10 +1112,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
         cpu.y = 0x25;
-        cpu.memory.write(0x243, 0xBE);
+        cpu.memory.borrow_mut().write(0x243, 0xBE);
 
-        cpu.memory.write(0xBE , 0xBA);
-        cpu.memory.write(0xBE + 1, 0xAF);
+        cpu.memory.borrow_mut().write(0xBE , 0xBA);
+        cpu.memory.borrow_mut().write(0xBE + 1, 0xAF);
 
         assert_eq!(0xAFBA + 0x25, cpu.get_indirect_y_address());
     }
@@ -1122,10 +1125,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
         cpu.y = 0x25;
-        cpu.memory.write(0x243, 0xFF);
+        cpu.memory.borrow_mut().write(0x243, 0xFF);
 
-        cpu.memory.write(0xFF, 0xBA);
-        cpu.memory.write(0x00, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0xBA);
+        cpu.memory.borrow_mut().write(0x00, 0xAF);
 
         assert_eq!(0xAFBA + 0x25, cpu.get_indirect_y_address());
     }
@@ -1135,10 +1138,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
         cpu.y = 0x25;
-        cpu.memory.write(0x243, 0xBE);
+        cpu.memory.borrow_mut().write(0x243, 0xBE);
 
-        cpu.memory.write(0xBE , 0xFF);
-        cpu.memory.write(0xBE + 1, 0xFF);
+        cpu.memory.borrow_mut().write(0xBE , 0xFF);
+        cpu.memory.borrow_mut().write(0xBE + 1, 0xFF);
 
         assert_eq!(0x0024, cpu.get_indirect_y_address());
     }
@@ -1147,7 +1150,7 @@ mod tests {
     fn read_immediate_returns_value_pointed_by_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFA);
+        cpu.memory.borrow_mut().write(0x432, 0xFA);
         assert_eq!(0xFA, cpu.read_immediate());
     }
 
@@ -1162,9 +1165,9 @@ mod tests {
     fn read_absolute_returns_value_pointed_by_address_at_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFA);
-        cpu.memory.write(0x433, 0xE0);
-        cpu.memory.write(0xE0FA, 0x52);
+        cpu.memory.borrow_mut().write(0x432, 0xFA);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0xE0FA, 0x52);
         assert_eq!(0x52, cpu.read_absolute());
     }
 
@@ -1179,9 +1182,9 @@ mod tests {
     fn read_absolute_with_offset_return_correct_value() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFF);
-        cpu.memory.write(0x433, 0xE0);
-        cpu.memory.write(0xE100, 0xC5);
+        cpu.memory.borrow_mut().write(0x432, 0xFF);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0xE100, 0xC5);
         assert_eq!(0xC5, cpu.read_absolute_with_offset(0x01));
     }
 
@@ -1189,8 +1192,8 @@ mod tests {
     fn read_absolute_with_offset_takes_4_cycles_if_page_boundary_is_not_crossed() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x00);
-        cpu.memory.write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0x432, 0x00);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
         cpu.read_absolute_with_offset(0xFA);
         assert_eq!(4, cpu.wait_counter);
     }
@@ -1199,8 +1202,8 @@ mod tests {
     fn read_absolute_with_offset_takes_5_cycles_if_page_boundary_is_barely_crossed() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFF);
-        cpu.memory.write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0x432, 0xFF);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
         cpu.read_absolute_with_offset(0x01);
         assert_eq!(5, cpu.wait_counter);
     }
@@ -1209,8 +1212,8 @@ mod tests {
     fn read_absolute_with_offset_takes_5_cycles_if_page_boundary_is_crossed() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFA);
-        cpu.memory.write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0x432, 0xFA);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
         cpu.read_absolute_with_offset(0xFE);
         assert_eq!(5, cpu.wait_counter);
     }
@@ -1220,9 +1223,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0xFA;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFA);
-        cpu.memory.write(0x433, 0xE0);
-        cpu.memory.write(0xE0FA + 0x00FA, 0x52);
+        cpu.memory.borrow_mut().write(0x432, 0xFA);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0xE0FA + 0x00FA, 0x52);
         assert_eq!(0x52, cpu.read_absolute_x());
     }
 
@@ -1232,9 +1235,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0xFA;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFA);
-        cpu.memory.write(0x433, 0xE0);
-        cpu.memory.write(0xE0FA + 0x00FA, 0x52);
+        cpu.memory.borrow_mut().write(0x432, 0xFA);
+        cpu.memory.borrow_mut().write(0x433, 0xE0);
+        cpu.memory.borrow_mut().write(0xE0FA + 0x00FA, 0x52);
         assert_eq!(0x52, cpu.read_absolute_y());
     }
 
@@ -1242,8 +1245,8 @@ mod tests {
     fn read_zero_page_returns_value_at_zero_page_pointed_by_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFA);
-        cpu.memory.write(0x00FA, 0xAE);
+        cpu.memory.borrow_mut().write(0x432, 0xFA);
+        cpu.memory.borrow_mut().write(0x00FA, 0xAE);
         assert_eq!(0xAE, cpu.read_zero_page());
     }
 
@@ -1258,8 +1261,8 @@ mod tests {
     fn read_zero_page_with_offset_returns_value_at_zero_page_with_offset() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
-        cpu.memory.write(0x008F, 0xAE);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x008F, 0xAE);
         assert_eq!(0xAE, cpu.read_zero_page_with_offset(0x0F));
     }
 
@@ -1267,8 +1270,8 @@ mod tests {
     fn read_zero_page_x_handles_wrap_around() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
-        cpu.memory.write(0x007F, 0xAE);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x007F, 0xAE);
         assert_eq!(0xAE, cpu.read_zero_page_with_offset(0xFF));
     }
 
@@ -1284,8 +1287,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x0F;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
-        cpu.memory.write(0x008F, 0xAE);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x008F, 0xAE);
         assert_eq!(0xAE, cpu.read_zero_page_x());
     }
 
@@ -1294,8 +1297,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x0F;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
-        cpu.memory.write(0x008F, 0xAE);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x008F, 0xAE);
         assert_eq!(0xAE, cpu.read_zero_page_y());
     }
 
@@ -1305,12 +1308,12 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
 
-        cpu.memory.write(0x80+0x04, 0x80);
-        cpu.memory.write(0x80+0x05, 0xAF);
+        cpu.memory.borrow_mut().write(0x80+0x04, 0x80);
+        cpu.memory.borrow_mut().write(0x80+0x05, 0xAF);
 
-        cpu.memory.write(0xAF80, 0xAE);
+        cpu.memory.borrow_mut().write(0xAF80, 0xAE);
 
         assert_eq!(0xAE, cpu.read_indirect_x());
     }
@@ -1320,12 +1323,12 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFE);
+        cpu.memory.borrow_mut().write(0x432, 0xFE);
 
-        cpu.memory.write(0x02, 0x80);
-        cpu.memory.write(0x03, 0xAF);
+        cpu.memory.borrow_mut().write(0x02, 0x80);
+        cpu.memory.borrow_mut().write(0x03, 0xAF);
 
-        cpu.memory.write(0xAF80, 0xAE);
+        cpu.memory.borrow_mut().write(0xAF80, 0xAE);
 
         assert_eq!(0xAE, cpu.read_indirect_x());
     }
@@ -1343,12 +1346,12 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
 
-        cpu.memory.write(0x80, 0x80);
-        cpu.memory.write(0x81, 0xAF);
+        cpu.memory.borrow_mut().write(0x80, 0x80);
+        cpu.memory.borrow_mut().write(0x81, 0xAF);
 
-        cpu.memory.write(0xAF80 + 0x04, 0xAE);
+        cpu.memory.borrow_mut().write(0xAF80 + 0x04, 0xAE);
 
         assert_eq!(0xAE, cpu.read_indirect_y());
     }
@@ -1359,12 +1362,12 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0xFF);
+        cpu.memory.borrow_mut().write(0x432, 0xFF);
 
-        cpu.memory.write(0xFF, 0xFF);
-        cpu.memory.write(0x00, 0xAB);
+        cpu.memory.borrow_mut().write(0xFF, 0xFF);
+        cpu.memory.borrow_mut().write(0x00, 0xAB);
 
-        cpu.memory.write(0x0ABFF + 0x04, 0xAE);
+        cpu.memory.borrow_mut().write(0x0ABFF + 0x04, 0xAE);
 
         assert_eq!(0xAE, cpu.read_indirect_y());
     }
@@ -1375,12 +1378,12 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
 
-        cpu.memory.write(0x80, 0xFF);
-        cpu.memory.write(0x81, 0xFF);
+        cpu.memory.borrow_mut().write(0x80, 0xFF);
+        cpu.memory.borrow_mut().write(0x81, 0xFF);
 
-        cpu.memory.write(0x0003, 0xAE);
+        cpu.memory.borrow_mut().write(0x0003, 0xAE);
 
         assert_eq!(0xAE, cpu.read_indirect_y());
     }
@@ -1390,10 +1393,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
 
-        cpu.memory.write(0x80, 0x80);
-        cpu.memory.write(0x81, 0xAF);
+        cpu.memory.borrow_mut().write(0x80, 0x80);
+        cpu.memory.borrow_mut().write(0x81, 0xAF);
         cpu.read_indirect_y();
         assert_eq!(5, cpu.wait_counter);
     }
@@ -1403,10 +1406,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x04;
         cpu.program_counter = 0x432;
-        cpu.memory.write(0x432, 0x80);
+        cpu.memory.borrow_mut().write(0x432, 0x80);
 
-        cpu.memory.write(0x80, 0xFE);
-        cpu.memory.write(0x81, 0xAF);
+        cpu.memory.borrow_mut().write(0x80, 0xFE);
+        cpu.memory.borrow_mut().write(0x81, 0xAF);
         cpu.read_indirect_y();
         assert_eq!(6, cpu.wait_counter);
     }
@@ -1415,9 +1418,9 @@ mod tests {
     fn do_zero_page_store_stores_value_into_memory_correctly() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.do_zero_page_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x14));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x14));
     }
 
     #[test]
@@ -1439,9 +1442,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x24;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.do_zero_page_x_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x14 + 0x24));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x14 + 0x24));
     }
 
     #[test]
@@ -1463,9 +1466,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x24;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.do_zero_page_y_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x14 + 0x24));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x14 + 0x24));
     }
 
     #[test]
@@ -1487,11 +1490,11 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x21);
-        cpu.memory.write(0x33, 0x18);
+        cpu.memory.borrow_mut().write(0x32, 0x21);
+        cpu.memory.borrow_mut().write(0x33, 0x18);
 
         cpu.do_absolute_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x1821));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x1821));
     }
 
     #[test]
@@ -1513,11 +1516,11 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x25;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x21);
-        cpu.memory.write(0x33, 0x18);
+        cpu.memory.borrow_mut().write(0x32, 0x21);
+        cpu.memory.borrow_mut().write(0x33, 0x18);
 
         cpu.do_absolute_x_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x1821 + 0x25));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x1821 + 0x25));
     }
 
     #[test]
@@ -1539,11 +1542,11 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x25;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x21);
-        cpu.memory.write(0x33, 0x18);
+        cpu.memory.borrow_mut().write(0x32, 0x21);
+        cpu.memory.borrow_mut().write(0x33, 0x18);
 
         cpu.do_absolute_y_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x1821 + 0x25));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x1821 + 0x25));
     }
 
     #[test]
@@ -1565,13 +1568,13 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x25;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x04);
+        cpu.memory.borrow_mut().write(0x32, 0x04);
 
-        cpu.memory.write(0x04 + 0x25, 0x18);
-        cpu.memory.write(0x04 + 0x25 + 1, 0x0B);
+        cpu.memory.borrow_mut().write(0x04 + 0x25, 0x18);
+        cpu.memory.borrow_mut().write(0x04 + 0x25 + 1, 0x0B);
 
         cpu.do_indirect_x_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x0B18));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x0B18));
     }
 
     #[test]
@@ -1593,13 +1596,13 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x25;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x04);
+        cpu.memory.borrow_mut().write(0x32, 0x04);
 
-        cpu.memory.write(0x04, 0x18);
-        cpu.memory.write(0x04 + 1, 0x0B);
+        cpu.memory.borrow_mut().write(0x04, 0x18);
+        cpu.memory.borrow_mut().write(0x04 + 1, 0x0B);
 
         cpu.do_indirect_y_store(0x2F);
-        assert_eq!(0x2F, cpu.memory.read(0x0B18 + 0x25));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x0B18 + 0x25));
     }
 
     #[test]
@@ -1936,7 +1939,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xD3;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.do_relative_jump_if(true);
         assert_eq!(0x21 + 0x10, cpu.program_counter);
     }
@@ -1946,7 +1949,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xD3;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.do_relative_jump_if(false);
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -1955,7 +1958,7 @@ mod tests {
     fn do_relative_jump_if_can_jump_backwards() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 24;
-        cpu.memory.write(24, 0xFC);
+        cpu.memory.borrow_mut().write(24, 0xFC);
         cpu.do_relative_jump_if(true);
         assert_eq!(25 - 4, cpu.program_counter);
     }
@@ -1971,7 +1974,7 @@ mod tests {
     fn do_relative_jump_takes_3_cycles_if_branching_to_same_page() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.do_relative_jump_if(true);
         assert_eq!(3, cpu.wait_counter);
     }
@@ -1980,7 +1983,7 @@ mod tests {
     fn do_relative_jump_takes_5_cycles_if_branching_to_different_page() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xEF;
-        cpu.memory.write(0xEF, 0x7F);
+        cpu.memory.borrow_mut().write(0xEF, 0x7F);
         cpu.do_relative_jump_if(true);
         assert_eq!(5, cpu.wait_counter);
     }
@@ -2034,7 +2037,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0x0F;
         cpu.status_flags = 0x81;
-        cpu.memory.write(0x1234, 0x12);
+        cpu.memory.borrow_mut().write(0x1234, 0x12);
         cpu.do_bit_test(0x0F);
         assert_eq!(0x01, cpu.status_flags);
     }
@@ -2135,7 +2138,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0xE9;
         cpu.program_counter = 0x15;
-        cpu.memory.write(0x15, 0x3E);
+        cpu.memory.borrow_mut().write(0x15, 0x3E);
         cpu.and_immediate();
         assert_eq!(0x28, cpu.a);
     }
@@ -2153,8 +2156,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0xE9;
         cpu.program_counter = 0xABCD;
-        cpu.memory.write(0xABCD, 0xFA);
-        cpu.memory.write(0xFA, 0x3E);
+        cpu.memory.borrow_mut().write(0xABCD, 0xFA);
+        cpu.memory.borrow_mut().write(0xFA, 0x3E);
 
         cpu.and_zero_page();
         assert_eq!(0x28, cpu.a);
@@ -2166,8 +2169,8 @@ mod tests {
         cpu.a = 0xE9;
         cpu.x = 0x05;
         cpu.program_counter = 0x15;
-        cpu.memory.write(0x15, 0x40);
-        cpu.memory.write(0x40 + 0x05, 0x3E);
+        cpu.memory.borrow_mut().write(0x15, 0x40);
+        cpu.memory.borrow_mut().write(0x40 + 0x05, 0x3E);
         cpu.and_zero_page_x();
         assert_eq!(0x28, cpu.a);
     }
@@ -2178,8 +2181,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0xE9;
         cpu.program_counter = 0x15;
-        cpu.memory.write(0x15, 0x40);
-        cpu.memory.write(0x40, 0x3E);
+        cpu.memory.borrow_mut().write(0x15, 0x40);
+        cpu.memory.borrow_mut().write(0x40, 0x3E);
         cpu.and_absolute();
         assert_eq!(0x28, cpu.a);
     }
@@ -2190,9 +2193,9 @@ mod tests {
         cpu.a = 0xE9;
         cpu.x = 0x04;
         cpu.program_counter = 0x52;
-        cpu.memory.write(0x52, 0x00);
-        cpu.memory.write(0x53, 0x80);
-        cpu.memory.write(0x8004, 0x3E);
+        cpu.memory.borrow_mut().write(0x52, 0x00);
+        cpu.memory.borrow_mut().write(0x53, 0x80);
+        cpu.memory.borrow_mut().write(0x8004, 0x3E);
         cpu.and_absolute_x();
         assert_eq!(0x28, cpu.a);
     }
@@ -2204,9 +2207,9 @@ mod tests {
         cpu.a = 0xE9;
         cpu.y = 0x04;
         cpu.program_counter = 0x52;
-        cpu.memory.write(0x52, 0x00);
-        cpu.memory.write(0x53, 0x80);
-        cpu.memory.write(0x8004, 0x3E);
+        cpu.memory.borrow_mut().write(0x52, 0x00);
+        cpu.memory.borrow_mut().write(0x53, 0x80);
+        cpu.memory.borrow_mut().write(0x8004, 0x3E);
         cpu.and_absolute_y();
         assert_eq!(0x28, cpu.a);
     }
@@ -2218,12 +2221,12 @@ mod tests {
         cpu.x = 0x04;
 
         cpu.program_counter = 0x52;
-        cpu.memory.write(0x52, 0x14);
+        cpu.memory.borrow_mut().write(0x52, 0x14);
 
-        cpu.memory.write(0x14 + 0x04, 0x00);
-        cpu.memory.write(0x14 + 0x04 + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x14 + 0x04, 0x00);
+        cpu.memory.borrow_mut().write(0x14 + 0x04 + 1, 0x80);
 
-        cpu.memory.write(0x8000, 0x3E);
+        cpu.memory.borrow_mut().write(0x8000, 0x3E);
         cpu.and_indirect_x();
         assert_eq!(0x28, cpu.a);
     }
@@ -2236,12 +2239,12 @@ mod tests {
         cpu.y = 0x04;
 
         cpu.program_counter = 0x52;
-        cpu.memory.write(0x52, 0x14);
+        cpu.memory.borrow_mut().write(0x52, 0x14);
 
-        cpu.memory.write(0x14, 0x00);
-        cpu.memory.write(0x14 + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x14, 0x00);
+        cpu.memory.borrow_mut().write(0x14 + 1, 0x80);
 
-        cpu.memory.write(0x8000 + 0x04, 0x3E);
+        cpu.memory.borrow_mut().write(0x8000 + 0x04, 0x3E);
         cpu.and_indirect_y();
         assert_eq!(0x28, cpu.a);
     }
@@ -2251,7 +2254,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0x81;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x7A);
+        cpu.memory.borrow_mut().write(0x1234, 0x7A);
         cpu.inclusive_or_immediate();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2261,8 +2264,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0x81;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x45);
-        cpu.memory.write(0x0045, 0x7A);
+        cpu.memory.borrow_mut().write(0x1234, 0x45);
+        cpu.memory.borrow_mut().write(0x0045, 0x7A);
         cpu.inclusive_or_zero_page();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2273,8 +2276,8 @@ mod tests {
         cpu.a = 0x81;
         cpu.x = 0x10;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x45);
-        cpu.memory.write(0x0045 + 0x10, 0x7A);
+        cpu.memory.borrow_mut().write(0x1234, 0x45);
+        cpu.memory.borrow_mut().write(0x0045 + 0x10, 0x7A);
         cpu.inclusive_or_zero_page_x();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2284,10 +2287,10 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0x81;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x45);
-        cpu.memory.write(0x1235, 0xAF);
+        cpu.memory.borrow_mut().write(0x1234, 0x45);
+        cpu.memory.borrow_mut().write(0x1235, 0xAF);
 
-        cpu.memory.write(0xAF45 , 0x7A);
+        cpu.memory.borrow_mut().write(0xAF45 , 0x7A);
         cpu.inclusive_or_absolute();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2298,10 +2301,10 @@ mod tests {
         cpu.a = 0x81;
         cpu.x = 0x15;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x45);
-        cpu.memory.write(0x1235, 0xAF);
+        cpu.memory.borrow_mut().write(0x1234, 0x45);
+        cpu.memory.borrow_mut().write(0x1235, 0xAF);
 
-        cpu.memory.write(0xAF45 + 0x15, 0x7A);
+        cpu.memory.borrow_mut().write(0xAF45 + 0x15, 0x7A);
         cpu.inclusive_or_absolute_x();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2312,10 +2315,10 @@ mod tests {
         cpu.a = 0x81;
         cpu.y = 0x15;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x45);
-        cpu.memory.write(0x1235, 0xAF);
+        cpu.memory.borrow_mut().write(0x1234, 0x45);
+        cpu.memory.borrow_mut().write(0x1235, 0xAF);
 
-        cpu.memory.write(0xAF45 + 0x15, 0x7A);
+        cpu.memory.borrow_mut().write(0xAF45 + 0x15, 0x7A);
         cpu.inclusive_or_absolute_y();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2326,12 +2329,12 @@ mod tests {
         cpu.a = 0x81;
         cpu.x = 0x15;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x20);
+        cpu.memory.borrow_mut().write(0x1234, 0x20);
 
-        cpu.memory.write(0x20 + 0x15, 0x45);
-        cpu.memory.write(0x20 + 0x15 + 1, 0xAF);
+        cpu.memory.borrow_mut().write(0x20 + 0x15, 0x45);
+        cpu.memory.borrow_mut().write(0x20 + 0x15 + 1, 0xAF);
 
-        cpu.memory.write(0xAF45, 0x7A);
+        cpu.memory.borrow_mut().write(0xAF45, 0x7A);
         cpu.inclusive_or_indirect_x();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2342,12 +2345,12 @@ mod tests {
         cpu.a = 0x81;
         cpu.y = 0x15;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x20);
+        cpu.memory.borrow_mut().write(0x1234, 0x20);
 
-        cpu.memory.write(0x20, 0x45);
-        cpu.memory.write(0x20 + 1, 0xAF);
+        cpu.memory.borrow_mut().write(0x20, 0x45);
+        cpu.memory.borrow_mut().write(0x20 + 1, 0xAF);
 
-        cpu.memory.write(0xAF45 + 0x15, 0x7A);
+        cpu.memory.borrow_mut().write(0xAF45 + 0x15, 0x7A);
         cpu.inclusive_or_indirect_y();
         assert_eq!(0xFB, cpu.a);
     }
@@ -2358,7 +2361,7 @@ mod tests {
         cpu.a = 0x81;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0xAF);
 
         cpu.exclusive_or_immediate();
         assert_eq!(0x2E, cpu.a);
@@ -2370,8 +2373,8 @@ mod tests {
         cpu.a = 0x81;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
-        cpu.memory.write(0x29, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0x29, 0xAF);
 
         cpu.exclusive_or_zero_page();
         assert_eq!(0x2E, cpu.a);
@@ -2384,8 +2387,8 @@ mod tests {
         cpu.x = 0x25;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
-        cpu.memory.write(0x29 + 0x25, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0x29 + 0x25, 0xAF);
 
         cpu.exclusive_or_zero_page_x();
         assert_eq!(0x2E, cpu.a);
@@ -2397,9 +2400,9 @@ mod tests {
         cpu.a = 0x81;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
-        cpu.memory.write(0x100, 0xEF);
-        cpu.memory.write(0xEF29, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0x100, 0xEF);
+        cpu.memory.borrow_mut().write(0xEF29, 0xAF);
 
         cpu.exclusive_or_absolute();
         assert_eq!(0x2E, cpu.a);
@@ -2412,9 +2415,9 @@ mod tests {
         cpu.x = 0xFA;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
-        cpu.memory.write(0x100, 0xEF);
-        cpu.memory.write(0xEF29 + 0xFA, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0x100, 0xEF);
+        cpu.memory.borrow_mut().write(0xEF29 + 0xFA, 0xAF);
 
         cpu.exclusive_or_absolute_x();
         assert_eq!(0x2E, cpu.a);
@@ -2427,9 +2430,9 @@ mod tests {
         cpu.y = 0xFA;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
-        cpu.memory.write(0x100, 0xEF);
-        cpu.memory.write(0xEF29 + 0xFA, 0xAF);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0x100, 0xEF);
+        cpu.memory.borrow_mut().write(0xEF29 + 0xFA, 0xAF);
 
         cpu.exclusive_or_absolute_y();
         assert_eq!(0x2E, cpu.a);
@@ -2443,12 +2446,12 @@ mod tests {
         cpu.x = 0x04;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
 
-        cpu.memory.write(0x29 + 0x04, 0x29);
-        cpu.memory.write(0x29 + 0x04 + 1, 0xEF);
+        cpu.memory.borrow_mut().write(0x29 + 0x04, 0x29);
+        cpu.memory.borrow_mut().write(0x29 + 0x04 + 1, 0xEF);
 
-        cpu.memory.write(0xEF29 , 0xAF);
+        cpu.memory.borrow_mut().write(0xEF29 , 0xAF);
 
         cpu.exclusive_or_indirect_x();
         assert_eq!(0x2E, cpu.a);
@@ -2461,12 +2464,12 @@ mod tests {
         cpu.y = 0x04;
 
         cpu.program_counter = 0xFF;
-        cpu.memory.write(0xFF, 0x29);
+        cpu.memory.borrow_mut().write(0xFF, 0x29);
 
-        cpu.memory.write(0x29, 0x29);
-        cpu.memory.write(0x29 + 1, 0xEF);
+        cpu.memory.borrow_mut().write(0x29, 0x29);
+        cpu.memory.borrow_mut().write(0x29 + 1, 0xEF);
 
-        cpu.memory.write(0xEF29 + 0x04, 0xAF);
+        cpu.memory.borrow_mut().write(0xEF29 + 0x04, 0xAF);
 
         cpu.exclusive_or_indirect_y();
         assert_eq!(0x2E, cpu.a);
@@ -2477,7 +2480,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_carry_clear();
         // 0x21 as the instruction reads the offset, thus modifying the pc
         assert_eq!(0x21 + 0x10, cpu.program_counter);
@@ -2488,7 +2491,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x43;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_carry_clear();
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -2498,7 +2501,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x01;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_carry_set();
         // 0x21 as the instruction reads the offset, thus modifying the pc
         assert_eq!(0x21 + 0x10, cpu.program_counter);
@@ -2509,7 +2512,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_carry_set();
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -2519,7 +2522,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xD3;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_equal();
         assert_eq!(0x21 + 0x10, cpu.program_counter);
     }
@@ -2529,7 +2532,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_equal();
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -2539,7 +2542,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xD4;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_not_equal();
         assert_eq!(0x21 + 0x10, cpu.program_counter);
     }
@@ -2549,7 +2552,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_negative();
         assert_eq!(0x21 + 0x10, cpu.program_counter);
     }
@@ -2559,7 +2562,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x7F;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_negative();
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -2568,7 +2571,7 @@ mod tests {
     fn branch_if_positive_jumps_to_relative_address_on_nonzero_positive_number() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 24;
-        cpu.memory.write(24, 0x6C);
+        cpu.memory.borrow_mut().write(24, 0x6C);
         cpu.set_negative_flag(0x32);
         cpu.branch_if_positive();
         assert_eq!(25 + 0x6C, cpu.program_counter);
@@ -2578,7 +2581,7 @@ mod tests {
     fn branch_if_positive_jumps_to_address_on_zero() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 24;
-        cpu.memory.write(24, 0x02);
+        cpu.memory.borrow_mut().write(24, 0x02);
         cpu.set_negative_flag(0x00);
         cpu.branch_if_positive();
 
@@ -2589,7 +2592,7 @@ mod tests {
     fn branch_if_positive_does_not_jump_on_negative_number() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 24;
-        cpu.memory.write(24, 0xBC);
+        cpu.memory.borrow_mut().write(24, 0xBC);
         cpu.set_negative_flag(0xff);
         cpu.branch_if_positive();
         assert_eq!(25, cpu.program_counter);
@@ -2600,7 +2603,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xBF;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_overflow_clear();
         assert_eq!(0x21 + 0x10, cpu.program_counter);
     }
@@ -2610,7 +2613,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x40;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_overflow_clear();
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -2620,7 +2623,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xD0;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_overflow_set();
         assert_eq!(0x21 + 0x10, cpu.program_counter);
     }
@@ -2630,7 +2633,7 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x20;
-        cpu.memory.write(0x20, 0x10);
+        cpu.memory.borrow_mut().write(0x20, 0x10);
         cpu.branch_if_overflow_set();
         assert_eq!(0x21, cpu.program_counter);
     }
@@ -2639,8 +2642,8 @@ mod tests {
     fn jump_absolute_sets_program_counter_to_new_value() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0;
-        cpu.memory.write(0, 0x15);
-        cpu.memory.write(1, 0xF0);
+        cpu.memory.borrow_mut().write(0, 0x15);
+        cpu.memory.borrow_mut().write(1, 0xF0);
         cpu.jump_absolute();
         assert_eq!(0xf015, cpu.program_counter);
     }
@@ -2658,8 +2661,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABCD;
         cpu.stack_pointer = 0xFF;
-        cpu.memory.write(0xABCD, 0x09);
-        cpu.memory.write(0xABCD + 1, 0xFC);
+        cpu.memory.borrow_mut().write(0xABCD, 0x09);
+        cpu.memory.borrow_mut().write(0xABCD + 1, 0xFC);
         cpu.jump_to_subroutine();
         // return address - 1 is pushed into stack in little endian form.
         // in this case, it's 0xABCE as the instruction takes two values from the instruction stream
@@ -2672,8 +2675,8 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABCD;
         cpu.stack_pointer = 0xFF;
-        cpu.memory.write(0xABCD, 0x09);
-        cpu.memory.write(0xABCD + 1, 0xFC);
+        cpu.memory.borrow_mut().write(0xABCD, 0x09);
+        cpu.memory.borrow_mut().write(0xABCD + 1, 0xFC);
         cpu.jump_to_subroutine();
         assert_eq!(0xFC09, cpu.program_counter);
     }
@@ -2743,8 +2746,8 @@ mod tests {
         cpu.status_flags = 0x00;
         cpu.a = 0xCA;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0x07);
-        cpu.memory.write(0x07, 0xF0);
+        cpu.memory.borrow_mut().write(0x1234, 0x07);
+        cpu.memory.borrow_mut().write(0x07, 0xF0);
         cpu.bit_test_zero_page();
         assert_eq!(0xC0, cpu.status_flags);
     }
@@ -2770,10 +2773,10 @@ mod tests {
         cpu.status_flags = 0x00;
         cpu.a = 0xCA;
         cpu.program_counter = 0x1234;
-        cpu.memory.write(0x1234, 0xFE);
-        cpu.memory.write(0x1235, 0xCA);
+        cpu.memory.borrow_mut().write(0x1234, 0xFE);
+        cpu.memory.borrow_mut().write(0x1235, 0xCA);
 
-        cpu.memory.write(0xCAFE, 0xF0);
+        cpu.memory.borrow_mut().write(0xCAFE, 0xF0);
         cpu.bit_test_absolute();
         assert_eq!(0xC0, cpu.status_flags);
     }
@@ -3135,7 +3138,7 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0x23);
+        cpu.memory.borrow_mut().write(25, 0x23);
         cpu.load_a_immediate();
         assert_eq!(0x23, cpu.a);
     }
@@ -3145,8 +3148,8 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0x23);
-        cpu.memory.write(0x23, 0xFA);
+        cpu.memory.borrow_mut().write(25, 0x23);
+        cpu.memory.borrow_mut().write(0x23, 0xFA);
         cpu.load_a_zero_page();
         assert_eq!(0xFA, cpu.a);
     }
@@ -3157,8 +3160,8 @@ mod tests {
 
         cpu.x = 0x12;
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0x23);
-        cpu.memory.write(0x23 + 0x12, 0xFA);
+        cpu.memory.borrow_mut().write(25, 0x23);
+        cpu.memory.borrow_mut().write(0x23 + 0x12, 0xFA);
         cpu.load_a_zero_page_x();
         assert_eq!(0xFA, cpu.a);
     }
@@ -3167,9 +3170,9 @@ mod tests {
     fn load_a_absolute_loads_correct_value_from_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0xB1);
-        cpu.memory.write(26, 0xF0);
-        cpu.memory.write(0xF0B1, 42);
+        cpu.memory.borrow_mut().write(25, 0xB1);
+        cpu.memory.borrow_mut().write(26, 0xF0);
+        cpu.memory.borrow_mut().write(0xF0B1, 42);
 
         cpu.load_a_absolute();
         assert_eq!(42, cpu.a);
@@ -3180,9 +3183,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x14;
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0xB1);
-        cpu.memory.write(26, 0xF0);
-        cpu.memory.write(0xF0B1 + 0x14, 42);
+        cpu.memory.borrow_mut().write(25, 0xB1);
+        cpu.memory.borrow_mut().write(26, 0xF0);
+        cpu.memory.borrow_mut().write(0xF0B1 + 0x14, 42);
 
         cpu.load_a_absolute_x();
         assert_eq!(42, cpu.a);
@@ -3193,9 +3196,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.y = 0x14;
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0xB1);
-        cpu.memory.write(26, 0xF0);
-        cpu.memory.write(0xF0B1 + 0x14, 42);
+        cpu.memory.borrow_mut().write(25, 0xB1);
+        cpu.memory.borrow_mut().write(26, 0xF0);
+        cpu.memory.borrow_mut().write(0xF0B1 + 0x14, 42);
 
         cpu.load_a_absolute_y();
         assert_eq!(42, cpu.a);
@@ -3207,12 +3210,12 @@ mod tests {
         cpu.x = 0x14;
 
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0xB1);
+        cpu.memory.borrow_mut().write(25, 0xB1);
 
-        cpu.memory.write(0xB1 + 0x14, 0xEF);
-        cpu.memory.write(0xB1 + 0x14 + 1, 0x02);
+        cpu.memory.borrow_mut().write(0xB1 + 0x14, 0xEF);
+        cpu.memory.borrow_mut().write(0xB1 + 0x14 + 1, 0x02);
 
-        cpu.memory.write(0x02EF, 0xAF);
+        cpu.memory.borrow_mut().write(0x02EF, 0xAF);
 
         cpu.load_a_indirect_x();
         assert_eq!(0xAF, cpu.a);
@@ -3224,12 +3227,12 @@ mod tests {
         cpu.y = 0x14;
 
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0xB1);
+        cpu.memory.borrow_mut().write(25, 0xB1);
 
-        cpu.memory.write(0xB1, 0xEF);
-        cpu.memory.write(0xB1 + 1, 0x02);
+        cpu.memory.borrow_mut().write(0xB1, 0xEF);
+        cpu.memory.borrow_mut().write(0xB1 + 1, 0x02);
 
-        cpu.memory.write(0x02EF + 0x14, 0xAF);
+        cpu.memory.borrow_mut().write(0x02EF + 0x14, 0xAF);
 
         cpu.load_a_indirect_y();
         assert_eq!(0xAF, cpu.a);
@@ -3240,9 +3243,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.a = 0x2F;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.store_a_zero_page();
-        assert_eq!(0x2F, cpu.memory.read(0x14));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x14));
     }
 
     #[test]
@@ -3251,9 +3254,9 @@ mod tests {
         cpu.a = 0x2F;
         cpu.x = 0xBF;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.store_a_zero_page_x();
-        assert_eq!(0x2F, cpu.memory.read(0x14 + 0xBF));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x14 + 0xBF));
     }
 
     #[test]
@@ -3262,11 +3265,11 @@ mod tests {
         cpu.a = 0x2F;
 
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0xAF);
-        cpu.memory.write(0x33, 0x07);
+        cpu.memory.borrow_mut().write(0x32, 0xAF);
+        cpu.memory.borrow_mut().write(0x33, 0x07);
 
         cpu.store_a_absolute();
-        assert_eq!(0x2F, cpu.memory.read(0x07AF));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x07AF));
     }
 
     #[test]
@@ -3275,11 +3278,11 @@ mod tests {
         cpu.a = 0x2F;
         cpu.x = 0x14;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0xAF);
-        cpu.memory.write(0x33, 0x07);
+        cpu.memory.borrow_mut().write(0x32, 0xAF);
+        cpu.memory.borrow_mut().write(0x33, 0x07);
 
         cpu.store_a_absolute_x();
-        assert_eq!(0x2F, cpu.memory.read(0x07AF + 0x14));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x07AF + 0x14));
     }
 
     #[test]
@@ -3288,11 +3291,11 @@ mod tests {
         cpu.a = 0x2F;
         cpu.y = 0x14;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0xAF);
-        cpu.memory.write(0x33, 0x07);
+        cpu.memory.borrow_mut().write(0x32, 0xAF);
+        cpu.memory.borrow_mut().write(0x33, 0x07);
 
         cpu.store_a_absolute_y();
-        assert_eq!(0x2F, cpu.memory.read(0x07AF + 0x14));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x07AF + 0x14));
     }
 
     #[test]
@@ -3302,14 +3305,14 @@ mod tests {
         cpu.x = 0x14;
         cpu.program_counter = 0x32;
 
-        cpu.memory.write(0x32, 0xAF);
+        cpu.memory.borrow_mut().write(0x32, 0xAF);
 
 
-        cpu.memory.write(0xAF + 0x14 , 0x07);
-        cpu.memory.write(0xAF + 0x14 + 1 , 0x20);
+        cpu.memory.borrow_mut().write(0xAF + 0x14 , 0x07);
+        cpu.memory.borrow_mut().write(0xAF + 0x14 + 1 , 0x20);
 
         cpu.store_a_indirect_x();
-        assert_eq!(0x2F, cpu.memory.read(0x2007));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x2007));
     }
 
     #[test]
@@ -3319,13 +3322,13 @@ mod tests {
         cpu.y = 0x14;
         cpu.program_counter = 0x32;
 
-        cpu.memory.write(0x32, 0xAF);
+        cpu.memory.borrow_mut().write(0x32, 0xAF);
 
-        cpu.memory.write(0xAF, 0x07);
-        cpu.memory.write(0xAF + 1 , 0x20);
+        cpu.memory.borrow_mut().write(0xAF, 0x07);
+        cpu.memory.borrow_mut().write(0xAF + 1 , 0x20);
 
         cpu.store_a_indirect_y();
-        assert_eq!(0x2F, cpu.memory.read(0x2007 + 0x14));
+        assert_eq!(0x2F, cpu.memory.borrow_mut().read(0x2007 + 0x14));
     }
 
     #[test]
@@ -3333,7 +3336,7 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 25;
-        cpu.memory.write(25, 0x23);
+        cpu.memory.borrow_mut().write(25, 0x23);
         cpu.load_x_immediate();
         assert_eq!(0x23, cpu.x);
     }
@@ -3343,9 +3346,9 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x25;
-        cpu.memory.write(0x25, 0xBE);
+        cpu.memory.borrow_mut().write(0x25, 0xBE);
 
-        cpu.memory.write(0xBE, 0x09);
+        cpu.memory.borrow_mut().write(0xBE, 0x09);
 
         cpu.load_x_zero_page();
         assert_eq!(0x09, cpu.x);
@@ -3357,9 +3360,9 @@ mod tests {
 
         cpu.y = 0x13;
         cpu.program_counter = 0x25;
-        cpu.memory.write(0x25, 0xBE);
+        cpu.memory.borrow_mut().write(0x25, 0xBE);
 
-        cpu.memory.write(0xBE + 0x13, 0x09);
+        cpu.memory.borrow_mut().write(0xBE + 0x13, 0x09);
 
         cpu.load_x_zero_page_y();
         assert_eq!(0x09, cpu.x);
@@ -3370,10 +3373,10 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x25;
-        cpu.memory.write(0x25, 0xBE);
-        cpu.memory.write(0x26, 0xAB);
+        cpu.memory.borrow_mut().write(0x25, 0xBE);
+        cpu.memory.borrow_mut().write(0x26, 0xAB);
 
-        cpu.memory.write(0xABBE, 0x09);
+        cpu.memory.borrow_mut().write(0xABBE, 0x09);
 
         cpu.load_x_absolute();
         assert_eq!(0x09, cpu.x);
@@ -3385,10 +3388,10 @@ mod tests {
 
         cpu.y = 0x13;
         cpu.program_counter = 0x25;
-        cpu.memory.write(0x25, 0xBE);
-        cpu.memory.write(0x26, 0xAB);
+        cpu.memory.borrow_mut().write(0x25, 0xBE);
+        cpu.memory.borrow_mut().write(0x26, 0xAB);
 
-        cpu.memory.write(0xABBE + 0x13, 0x09);
+        cpu.memory.borrow_mut().write(0xABBE + 0x13, 0x09);
 
         cpu.load_x_absolute_y();
         assert_eq!(0x09, cpu.x);
@@ -3399,9 +3402,9 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x2f;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.store_x_zero_page();
-        assert_eq!(0x2f, cpu.memory.read(0x14));
+        assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x14));
     }
 
     #[test]
@@ -3410,9 +3413,9 @@ mod tests {
         cpu.x = 0x2f;
         cpu.y = 0x53;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
         cpu.store_x_zero_page_y();
-        assert_eq!(0x2f, cpu.memory.read(0x14 + 0x53));
+        assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x14 + 0x53));
     }
 
     #[test]
@@ -3420,11 +3423,11 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.x = 0x2f;
         cpu.program_counter = 0x32;
-        cpu.memory.write(0x32, 0x14);
-        cpu.memory.write(0x33, 0x08);
+        cpu.memory.borrow_mut().write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x33, 0x08);
 
         cpu.store_x_absolute();
-        assert_eq!(0x2f, cpu.memory.read(0x0814));
+        assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x0814));
     }
 
     #[test]
@@ -3456,7 +3459,7 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x12);
+        cpu.memory.borrow_mut().write(0x123, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3469,7 +3472,7 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3483,7 +3486,7 @@ mod tests {
 
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_immediate();
@@ -3495,8 +3498,8 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x50, 0x12);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3509,8 +3512,8 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x50, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3524,8 +3527,8 @@ mod tests {
 
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x50, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_zero_page();
@@ -3538,8 +3541,8 @@ mod tests {
 
         cpu.x = 0x25;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x50 + 0x25, 0x12);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50 + 0x25, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3553,8 +3556,8 @@ mod tests {
 
         cpu.x = 0x25;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x50 + 0x25, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50 + 0x25, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3569,8 +3572,8 @@ mod tests {
         cpu.status_flags = 0x00;
         cpu.x = 0x25;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x50 + 0x25, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50 + 0x25, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_zero_page_x();
@@ -3582,9 +3585,9 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050, 0x12);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3597,9 +3600,9 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3613,9 +3616,9 @@ mod tests {
 
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_absolute();
@@ -3628,9 +3631,9 @@ mod tests {
 
         cpu.x = 0xFA;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050 + 0xFA, 0x12);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050 + 0xFA, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3644,9 +3647,9 @@ mod tests {
 
         cpu.x = 0xFA;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050 + 0xFA, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050 + 0xFA, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3661,9 +3664,9 @@ mod tests {
         cpu.x = 0xFA;
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050 + 0xFA, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050 + 0xFA, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_absolute_x();
@@ -3676,9 +3679,9 @@ mod tests {
 
         cpu.y = 0xFA;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050 + 0xFA, 0x12);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050 + 0xFA, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3692,9 +3695,9 @@ mod tests {
 
         cpu.y = 0xFA;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050 + 0xFA, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050 + 0xFA, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3709,9 +3712,9 @@ mod tests {
         cpu.y = 0xFA;
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x123;
-        cpu.memory.write(0x123, 0x50);
-        cpu.memory.write(0x124, 0x80);
-        cpu.memory.write(0x8050 + 0xFA, 0x40);
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050 + 0xFA, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_absolute_y();
@@ -3724,14 +3727,14 @@ mod tests {
 
         cpu.x = 0xBA;
         cpu.program_counter = 0x1010;
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x0E + 0xBA, 0x50);
-        cpu.memory.write(0x0E + 0xBA + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x0E + 0xBA, 0x50);
+        cpu.memory.borrow_mut().write(0x0E + 0xBA + 1, 0x80);
 
-        cpu.memory.write(0x8050, 0x12);
+        cpu.memory.borrow_mut().write(0x8050, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3745,12 +3748,12 @@ mod tests {
 
         cpu.x = 0xBA;
         cpu.program_counter = 0x1010;
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x0E + 0xBA, 0x50);
-        cpu.memory.write(0x0E + 0xBA + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x0E + 0xBA, 0x50);
+        cpu.memory.borrow_mut().write(0x0E + 0xBA + 1, 0x80);
 
-        cpu.memory.write(0x8050, 0x40);
+        cpu.memory.borrow_mut().write(0x8050, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3765,12 +3768,12 @@ mod tests {
         cpu.x = 0xBA;
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x1010;
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x0E + 0xBA, 0x50);
-        cpu.memory.write(0x0E + 0xBA + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x0E + 0xBA, 0x50);
+        cpu.memory.borrow_mut().write(0x0E + 0xBA + 1, 0x80);
 
-        cpu.memory.write(0x8050, 0x40);
+        cpu.memory.borrow_mut().write(0x8050, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_indirect_x();
@@ -3783,14 +3786,14 @@ mod tests {
 
         cpu.y = 0xBA;
         cpu.program_counter = 0x1010;
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x0E, 0x50);
-        cpu.memory.write(0x0E + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x0E, 0x50);
+        cpu.memory.borrow_mut().write(0x0E + 1, 0x80);
 
-        cpu.memory.write(0x8050 + 0xBA, 0x12);
+        cpu.memory.borrow_mut().write(0x8050 + 0xBA, 0x12);
         cpu.status_flags = 0x00;
         cpu.a = 0xFF;
 
@@ -3804,12 +3807,12 @@ mod tests {
 
         cpu.y = 0xBA;
         cpu.program_counter = 0x1010;
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x0E, 0x50);
-        cpu.memory.write(0x0E + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x0E, 0x50);
+        cpu.memory.borrow_mut().write(0x0E + 1, 0x80);
 
-        cpu.memory.write(0x8050 + 0xBA, 0x40);
+        cpu.memory.borrow_mut().write(0x8050 + 0xBA, 0x40);
         cpu.status_flags = 0x00;
         cpu.a = 0x40;
 
@@ -3824,12 +3827,12 @@ mod tests {
         cpu.y = 0xBA;
         cpu.status_flags = 0x00;
         cpu.program_counter = 0x1010;
-        cpu.memory.write(0x1010, 0x0E);
+        cpu.memory.borrow_mut().write(0x1010, 0x0E);
 
-        cpu.memory.write(0x0E, 0x50);
-        cpu.memory.write(0x0E + 1, 0x80);
+        cpu.memory.borrow_mut().write(0x0E, 0x50);
+        cpu.memory.borrow_mut().write(0x0E + 1, 0x80);
 
-        cpu.memory.write(0x8050 + 0xBA, 0x40);
+        cpu.memory.borrow_mut().write(0x8050 + 0xBA, 0x40);
         cpu.a = 0x39;
 
         cpu.compare_indirect_y();
@@ -3842,4 +3845,4 @@ mod tests {
         cpu.no_operation();
         assert_eq!(2, cpu.wait_counter);
     }
-}*/
+}

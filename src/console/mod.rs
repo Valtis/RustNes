@@ -4,24 +4,25 @@ use memory::Memory;
 use cpu::Cpu;
 use rom::read_rom;
 
+use std::rc::Rc;
 use std::cell::RefCell;
 
 pub struct Console{
     cpu: Cpu,
-    memory: RefCell<Memory>,
+    memory: Rc<RefCell<Memory>>,
 }
 
 impl Console {
     pub fn new (rom_path: &str) -> Console {
 
         let mut rom = read_rom(rom_path);
-        let mut memory = RefCell::new(Memory::new());
+        let mut mem = Rc::new(RefCell::new(Memory::new()));
         let mut console = Console {
-            memory: memory.clone(),
-            cpu: Cpu::new(&rom.header.tv_system, memory.clone()),
+            memory: mem.clone(),
+            cpu: Cpu::new(&rom.header.tv_system, mem.clone()),
         };
 
-        console.memory.set_rom(rom);
+        console.memory.borrow_mut().set_rom(rom);
         console
     }
 
