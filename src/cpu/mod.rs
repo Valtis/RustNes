@@ -136,7 +136,10 @@ impl Cpu {
             216 => self.clear_decimal_flag(),
             217 => self.compare_absolute_y(),
             221 => self.compare_absolute_x(),
+            224 => self.compare_x_immediate(),
+            228 => self.compare_x_zero_page(),
             234 => self.no_operation(),
+            236 => self.compare_x_absolute(),
             240 => self.branch_if_equal(),
             248 => self.set_decimal_flag(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
@@ -900,6 +903,24 @@ impl Cpu {
     fn compare_indirect_y(&mut self) {
         let register = self.a;
         let operand = self.read_indirect_y();
+        self.do_compare(register, operand);
+    }
+
+    fn compare_x_immediate(&mut self) {
+        let register = self.x;
+        let operand = self.read_immediate();
+        self.do_compare(register, operand);
+    }
+
+    fn compare_x_zero_page(&mut self) {
+        let register = self.x;
+        let operand = self.read_zero_page();
+        self.do_compare(register, operand);
+    }
+
+    fn compare_x_absolute(&mut self) {
+        let register = self.x;
+        let operand = self.read_absolute();
         self.do_compare(register, operand);
     }
 
@@ -4276,6 +4297,132 @@ mod tests {
         cpu.compare_indirect_y();
         assert_eq!(0x80, cpu.status_flags);
     }
+    #[test]
+    fn compare_x_immediate_sets_carry_flag_if_accumulator_is_greater() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x12);
+        cpu.status_flags = 0x00;
+        cpu.x = 0x4F;
+
+        cpu.compare_x_immediate();
+        assert_eq!(0x01, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_immediate_sets_carry_flag_and_zero_flag_if_accumulator_is_equal() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x40);
+        cpu.status_flags = 0x00;
+        cpu.x = 0x40;
+
+        cpu.compare_x_immediate();
+        assert_eq!(0x03, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_immediate_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+        let mut cpu = create_test_cpu();
+
+        cpu.status_flags = 0x03;
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x40);
+        cpu.x = 0x39;
+
+        cpu.compare_x_immediate();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_zero_page_sets_carry_flag_if_accumulator_is_greater() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50, 0x12);
+        cpu.status_flags = 0x00;
+        cpu.x = 0x4F;
+
+        cpu.compare_x_zero_page();
+        assert_eq!(0x01, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_zero_page_sets_carry_flag_and_zero_flag_if_accumulator_is_equal() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50, 0x40);
+        cpu.status_flags = 0x00;
+        cpu.x = 0x40;
+
+        cpu.compare_x_zero_page();
+        assert_eq!(0x03, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_zero_page_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+        let mut cpu = create_test_cpu();
+
+        cpu.status_flags = 0x03;
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x50, 0x40);
+        cpu.x = 0x39;
+
+        cpu.compare_x_zero_page();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_absolute_sets_carry_flag_if_accumulator_is_greater() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050, 0x12);
+        cpu.status_flags = 0x00;
+        cpu.x = 0x2F;
+
+        cpu.compare_x_absolute();
+        assert_eq!(0x01, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_absolute_sets_carry_flag_and_zero_flag_if_accumulator_is_equal() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050, 0x40);
+        cpu.status_flags = 0x00;
+        cpu.x = 0x40;
+
+        cpu.compare_x_absolute();
+        assert_eq!(0x03, cpu.status_flags);
+    }
+
+    #[test]
+    fn compare_x_absolute_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+        let mut cpu = create_test_cpu();
+
+        cpu.status_flags = 0x03;
+        cpu.program_counter = 0x123;
+        cpu.memory.borrow_mut().write(0x123, 0x50);
+        cpu.memory.borrow_mut().write(0x124, 0x80);
+        cpu.memory.borrow_mut().write(0x8050, 0x40);
+        cpu.x = 0x39;
+
+        cpu.compare_x_absolute();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
 
     #[test]
     fn compare_y_immediate_sets_carry_flag_if_accumulator_is_greater() {
