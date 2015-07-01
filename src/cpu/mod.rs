@@ -127,6 +127,7 @@ impl Cpu {
             193 => self.compare_indirect_x(),
             196 => self.compare_y_zero_page(),
             197 => self.compare_zero_page(),
+            200 => self.increase_y(),
             201 => self.compare_immediate(),
             204 => self.compare_y_absolute(),
             205 => self.compare_absolute(),
@@ -140,6 +141,7 @@ impl Cpu {
             225 => self.subtract_indirect_x(),
             228 => self.compare_x_zero_page(),
             229 => self.subtract_zero_page(),
+            232 => self.increase_x(),
             233 => self.subtract_immediate(),
             234 => self.no_operation(),
             236 => self.compare_x_absolute(),
@@ -1033,6 +1035,18 @@ impl Cpu {
     fn subtract_indirect_y(&mut self) {
         let operand = self.read_indirect_y();
         self.do_subtract(operand);
+    }
+
+    fn increase_x(&mut self) {
+        let value = (self.x as u16) + 1;
+        self.x = (value & 0xFF) as u8;
+        self.set_load_flags((value & 0xFF) as u8)
+    }
+
+    fn increase_y(&mut self) {
+        let value = (self.y as u16) + 1;
+        self.y = (value & 0xFF) as u8;
+        self.set_load_flags((value & 0xFF) as u8)
     }
 
     fn no_operation(&mut self) {
@@ -4986,6 +5000,124 @@ mod tests {
 
         cpu.subtract_indirect_y();
         assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn increase_x_increases_value_by_one() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 20;
+        cpu.increase_x();
+        assert_eq!(21, cpu.x);
+    }
+
+    #[test]
+    fn increase_x_handles_overflow() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 255;
+        cpu.increase_x();
+        assert_eq!(0, cpu.x);
+    }
+
+
+    #[test]
+    fn increase_x_sets_negative_flag_if_result_is_negative() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 0x7F;
+        cpu.status_flags = 0x00;
+        cpu.increase_x();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_x_unsets_negative_flag_if_result_is_positive() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 0x5;
+        cpu.status_flags = 0x80;
+        cpu.increase_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_x_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 0xFF;
+        cpu.status_flags = 0x00;
+        cpu.increase_x();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_x_unsets_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 0x05;
+        cpu.status_flags = 0x02;
+        cpu.increase_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_y_increases_value_by_one() {
+        let mut cpu = create_test_cpu();
+
+        cpu.y = 20;
+        cpu.increase_y();
+        assert_eq!(21, cpu.y);
+    }
+
+    #[test]
+    fn increase_y_handles_overflow() {
+        let mut cpu = create_test_cpu();
+
+        cpu.y = 255;
+        cpu.increase_y();
+        assert_eq!(0, cpu.y);
+    }
+
+
+    #[test]
+    fn increase_y_sets_negative_flag_if_result_is_negative() {
+        let mut cpu = create_test_cpu();
+
+        cpu.y = 0x7F;
+        cpu.status_flags = 0x00;
+        cpu.increase_y();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_y_unsets_negative_flag_if_result_is_positive() {
+        let mut cpu = create_test_cpu();
+
+        cpu.y = 0x5;
+        cpu.status_flags = 0x80;
+        cpu.increase_y();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_y_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+
+        cpu.y = 0xFF;
+        cpu.status_flags = 0x00;
+        cpu.increase_y();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_y_unsets_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+
+        cpu.y = 0x05;
+        cpu.status_flags = 0x02;
+        cpu.increase_y();
+        assert_eq!(0x00, cpu.status_flags);
     }
 
     #[test]
