@@ -439,14 +439,19 @@ impl Cpu {
         if result == 0 {
             self.status_flags = self.status_flags | 0x02;
         }
-        // if bit 7 is not same in accumulator and result, set oveflow flag
-        if (result & 0x80) as u8 != self.a & 0x80 {
-            self.status_flags = self.status_flags | 0x40;
-        }
 
         // if result is greater than 255, set carry flag
         if result > 255 {
             self.status_flags = self.status_flags | 0x01;
+        }
+
+        // overflow can only happen when adding two positive or two negative numbers
+        // not when adding positive and negative. Therefore, if both operands have
+        // same sign bit but sign bit is different than the result has, overflow
+        // has happened. Thus xor both operands (a and func argument) with result
+        // and mask it with 0x80. If result is nonzero, overflow has happened.
+        if (operand as u16 ^ result) & (self.a as u16 ^ result) & 0x80 != 0 {
+            self.status_flags = self.status_flags | 0x40;
         }
 
         // finally set negative flag if necessary
@@ -2291,7 +2296,7 @@ mod tests {
     }
 
     #[test]
-    fn do_add_with_large_enough_numbers_to_cause_overflow_stores_correct_value_in_accumulator() {
+    fn addition_works_with_positive_numbers_that_would_overflow_signed_8_bit_integer() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.a = 90;
@@ -2302,8 +2307,20 @@ mod tests {
         assert_eq!(160, cpu.a);
     }
 
+
+
     #[test]
-    fn do_add_with_large_enough_numbers_to_cause_overflow_sets_overflow_flag() {
+    fn overflow_flag_is_not_set_when_positive_and_negative_number_are_added_and_result_is_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 20;
+        cpu.do_add(220); // -36 as signed 8 bit integer
+
+        assert_eq!(0x00, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_add_with_two_positive_numbers_sets_overflow_flag_if_result_does_not_fit_8_bit_signed_variable() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.a = 70;
@@ -2315,13 +2332,25 @@ mod tests {
     }
 
     #[test]
-    fn do_add_sets_overflow_flag_if_negative_number_overflows_into_positive() {
+    fn do_add_with_two_negative_numbers_sets_overflow_flag_if_result_does_not_fit_8_bit_signed_variable() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.a = 200;
-        cpu.do_add(70);
-
+        cpu.a = 208; // 208 -> (208 -256 ) = - 48; this positive number represents negative number
+        // result is smaller than signed 8 bit integer can hold; overflows into positive signed number
+        cpu.do_add(144); // 144 -> (144 - 256) = -112
+        // -48 + -112 =  -160; does not fit the signed 8 bit integer. Overflow should be set
+        // should set negative flag as well but not in scope for this one
         assert_eq!(0x40, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn overflow_flag_is_not_set_when_negative_and_positive_number_are_added_and_result_is_positive() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 220; // -36 as signed 8 bit integer
+        cpu.do_add(50);
+
+        assert_eq!(0x00, cpu.status_flags & 0x40);
     }
 
     #[test]
