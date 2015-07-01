@@ -7,6 +7,7 @@ use rom::read_rom;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+#[derive(Debug)]
 pub struct Console{
     cpu: Cpu,
     memory: Rc<RefCell<Memory>>,

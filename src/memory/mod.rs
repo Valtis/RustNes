@@ -1,11 +1,17 @@
 use rom::Rom;
-
+use std::fmt;
 // Badly unfinished. Consider this to be a placeholder for now.
 
-#[derive(Debug)]
 pub struct Memory {
     rom: Rom,
     memory: Vec<u8>,
+}
+
+
+impl fmt::Debug for Memory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<Memory contents not printed>")
+    }
 }
 
 impl Memory {
