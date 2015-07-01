@@ -137,11 +137,19 @@ impl Cpu {
             217 => self.compare_absolute_y(),
             221 => self.compare_absolute_x(),
             224 => self.compare_x_immediate(),
+            225 => self.subtract_indirect_x(),
             228 => self.compare_x_zero_page(),
+            229 => self.subtract_zero_page(),
+            233 => self.subtract_immediate(),
             234 => self.no_operation(),
             236 => self.compare_x_absolute(),
+            237 => self.subtract_absolute(),
             240 => self.branch_if_equal(),
+            241 => self.subtract_indirect_y(),
+            245 => self.subtract_zero_page_x(),
             248 => self.set_decimal_flag(),
+            249 => self.subtract_absolute_y(),
+            253 => self.subtract_absolute_x(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.program_counter - 1, self),
         }
@@ -463,6 +471,10 @@ impl Cpu {
         self.set_load_flags(result as u8);
 
         self.a = result as u8;
+    }
+
+    fn do_subtract(&mut self, operand: u8) {
+        self.do_add(255 - operand);
     }
 
     fn and_immediate(&mut self) {
@@ -981,6 +993,46 @@ impl Cpu {
     fn add_indirect_y(&mut self) {
         let operand = self.read_indirect_y();
         self.do_add(operand);
+    }
+
+    fn subtract_immediate(&mut self) {
+        let operand = self.read_immediate();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_zero_page(&mut self) {
+        let operand = self.read_zero_page();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_zero_page_x(&mut self) {
+        let operand = self.read_zero_page_x();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_absolute(&mut self) {
+        let operand = self.read_absolute();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_absolute_x(&mut self) {
+        let operand = self.read_absolute_x();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_absolute_y(&mut self) {
+        let operand = self.read_absolute_y();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_indirect_x(&mut self) {
+        let operand = self.read_indirect_x();
+        self.do_subtract(operand);
+    }
+
+    fn subtract_indirect_y(&mut self) {
+        let operand = self.read_indirect_y();
+        self.do_subtract(operand);
     }
 
     fn no_operation(&mut self) {
@@ -2526,6 +2578,141 @@ mod tests {
         cpu.do_add(200);
 
         assert_eq!(241, cpu.a);
+    }
+
+    #[test]
+    fn do_subtract_subtracts_two_positive_numbers_correctly_when_result_is_positive() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 40;
+        cpu.do_subtract(10);
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn do_subtract_subtracts_borrow_if_carry_is_not_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 40;
+        cpu.do_subtract(10);
+        assert_eq!(29, cpu.a);
+    }
+
+    #[test]
+    fn do_subtract_gives_correct_value_if_result_wraps_around() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 40;
+        cpu.do_subtract(60);
+        assert_eq!(236, cpu.a);
+    }
+
+    #[test]
+    fn do_subtract_sets_clears_carry_flag_if_result_is_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 40;
+        cpu.do_subtract(60);
+        assert_eq!(0x00, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn do_subtract_sets_carry_if_result_is_positive() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.a = 40;
+        cpu.do_subtract(20);
+        assert_eq!(0x01, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn do_subtract_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 40;
+        cpu.do_subtract(40);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_subtract_unsets_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x03;
+        cpu.a = 40;
+        cpu.do_subtract(10);
+        assert_eq!(0x00, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_subtract_sets_overflow_flag_if_subtraction_is_too_small_to_be_represented_as_8_bit_signed() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x03;
+        cpu.a = 208; // - 48
+        cpu.do_subtract(112);
+        assert_eq!(0x40, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_subtract_sets_overflow_flag_if_subtraction_is_too_big_to_be_represented_as_8_bit_signed() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x03;
+        cpu.a = 80;
+        cpu.do_subtract(176); // -80;
+        assert_eq!(0x40, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_subtract_unsets_overflow_flag_if_accumulator_was_positive_and_result_is_positive_and_fits() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x43;
+        cpu.a = 80;
+        cpu.do_subtract(40);
+        assert_eq!(0x00, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_subtract_unsets_overflow_flag_if_accumulator_was_positive_and_result_is_negative_and_fits() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x43;
+        cpu.a = 80;
+        cpu.do_subtract(100);
+        assert_eq!(0x00, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_subtract_unsets_overflow_flag_if_accumulator_was_negative_and_result_is_negative_and_fits() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x43;
+        cpu.a = 0xFF;
+        cpu.do_subtract(1);
+        assert_eq!(0x00, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_subtract_unsets_overflow_flag_if_accumulator_was_negative_and_result_is_positive_and_fits() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x43;
+        cpu.a = 0xFF;
+        cpu.do_subtract(0xFE);
+        assert_eq!(0x00, cpu.status_flags & 0x40);
+    }
+
+    #[test]
+    fn do_subtract_sets_negative_flag_if_end_result_is_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x03;
+        cpu.a = 4;
+        cpu.do_subtract(6);
+        assert_eq!(0x80, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn do_subtract_unsets_negative_flag_if_end_result_is_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x03;
+        cpu.a = 4;
+        cpu.do_subtract(6);
+        assert_eq!(0x80, cpu.status_flags & 0x80);
     }
 
     #[test]
@@ -4670,6 +4857,135 @@ mod tests {
         cpu.add_indirect_y();
         assert_eq!(78, cpu.a);
 
+    }
+
+    #[test]
+    fn subtract_immediate_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x30;
+        cpu.memory.borrow_mut().write(0x30, 19);
+        cpu.subtract_immediate();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_zero_page_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x30);
+        cpu.memory.borrow_mut().write(0x30, 19);
+
+        cpu.subtract_zero_page();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_zero_page_x_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.x = 0x20;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x30);
+        cpu.memory.borrow_mut().write(0x30 + 0x20, 19);
+
+        cpu.subtract_zero_page_x();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_absolute_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x30);
+        cpu.memory.borrow_mut().write(0x08F1, 0xB0);
+
+        cpu.memory.borrow_mut().write(0xB030, 19);
+
+        cpu.subtract_absolute();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_absolute_x_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.x = 0x70;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x30);
+        cpu.memory.borrow_mut().write(0x08F1, 0xB0);
+
+        cpu.memory.borrow_mut().write(0xB030 + 0x70, 19);
+
+        cpu.subtract_absolute_x();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_absolute_y_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.y = 0x70;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x30);
+        cpu.memory.borrow_mut().write(0x08F1, 0xB0);
+
+        cpu.memory.borrow_mut().write(0xB030 + 0x70, 19);
+
+        cpu.subtract_absolute_y();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_indirect_x_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.x = 0x05;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x70);
+
+        cpu.memory.borrow_mut().write(0x70 + 0x05, 0x30);
+        cpu.memory.borrow_mut().write(0x71 + 0x05, 0xB0);
+
+        cpu.memory.borrow_mut().write(0xB030, 19);
+
+        cpu.subtract_indirect_x();
+        assert_eq!(30, cpu.a);
+    }
+
+    #[test]
+    fn subtract_indirect_y_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+
+        cpu.a = 49;
+        cpu.y = 0x05;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x08F0;
+        cpu.memory.borrow_mut().write(0x08F0, 0x70);
+
+        cpu.memory.borrow_mut().write(0x70, 0x30);
+        cpu.memory.borrow_mut().write(0x71, 0xB0);
+
+        cpu.memory.borrow_mut().write(0xB030 + 0x05, 19);
+
+        cpu.subtract_indirect_y();
+        assert_eq!(30, cpu.a);
     }
 
     #[test]
