@@ -102,19 +102,24 @@ impl Cpu {
             153 => self.store_a_absolute_y(),
             154 => self.transfer_x_to_stack_pointer(),
             157 => self.store_a_absolute_x(),
+            160 => self.load_y_immediate(),
             161 => self.load_a_indirect_x(),
             162 => self.load_x_immediate(),
+            164 => self.load_y_zero_page(),
             165 => self.load_a_zero_page(),
             166 => self.load_x_zero_page(),
             169 => self.load_a_immediate(),
+            172 => self.load_y_absolute(),
             173 => self.load_a_absolute(),
             174 => self.load_x_absolute(),
             176 => self.branch_if_carry_set(),
             177 => self.load_a_indirect_y(),
+            180 => self.load_y_zero_page_x(),
             181 => self.load_a_zero_page_x(),
             182 => self.load_x_zero_page_y(),
             184 => self.clear_overflow_flag(),
             185 => self.load_a_absolute_y(),
+            188 => self.load_y_absolute_x(),
             189 => self.load_a_absolute_x(),
             190 => self.load_x_absolute_y(),
             193 => self.compare_indirect_x(),
@@ -814,6 +819,31 @@ impl Cpu {
     fn store_x_absolute(&mut self) {
         let value = self.x;
         self.do_absolute_store(value);
+    }
+
+    fn load_y_immediate(&mut self) {
+        let value = self.read_immediate();
+        self.load_y(value);
+    }
+
+    fn load_y_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        self.load_y(value);
+    }
+
+    fn load_y_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        self.load_y(value);
+    }
+
+    fn load_y_absolute(&mut self) {
+        let value = self.read_absolute();
+        self.load_y(value);
+    }
+
+    fn load_y_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        self.load_y(value);
     }
 
     fn transfer_x_to_stack_pointer(&mut self) {
@@ -3749,6 +3779,70 @@ mod tests {
 
         cpu.store_x_absolute();
         assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x0814));
+    }
+
+    #[test]
+    fn load_y_immediate_sets_y_to_a_correct_value() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x70;
+        cpu.memory.borrow_mut().write(0x70, 0x2F);
+
+        cpu.load_y_immediate();
+        assert_eq!(0x2F, cpu.y);
+    }
+
+    #[test]
+    fn load_y_zero_page_sets_y_to_a_correct_value() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x720;
+        cpu.memory.borrow_mut().write(0x720, 0x40);
+        cpu.memory.borrow_mut().write(0x40, 0x2F);
+
+        cpu.load_y_zero_page();
+        assert_eq!(0x2F, cpu.y);
+    }
+
+    #[test]
+    fn load_y_zero_page_x_sets_y_to_a_correct_value() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 0x14;
+        cpu.program_counter = 0x720;
+        cpu.memory.borrow_mut().write(0x720, 0x40);
+        cpu.memory.borrow_mut().write(0x40 + 0x14, 0x2F);
+
+        cpu.load_y_zero_page_x();
+        assert_eq!(0x2F, cpu.y);
+    }
+
+    #[test]
+    fn load_y_absolute_sets_y_to_a_correct_value() {
+        let mut cpu = create_test_cpu();
+
+        cpu.program_counter = 0x720;
+        cpu.memory.borrow_mut().write(0x720, 0x40);
+        cpu.memory.borrow_mut().write(0x721, 0xBE);
+        cpu.memory.borrow_mut().write(0xBE40, 0x2F);
+
+        cpu.load_y_absolute();
+        assert_eq!(0x2F, cpu.y);
+    }
+
+    #[test]
+    fn load_y_absolute_x_sets_y_to_a_correct_value() {
+        let mut cpu = create_test_cpu();
+
+        cpu.x = 0x25;
+        cpu.program_counter = 0x720;
+        cpu.memory.borrow_mut().write(0x720, 0x40);
+        cpu.memory.borrow_mut().write(0x721, 0xBE);
+        cpu.memory.borrow_mut().write(0xBE40 + 0x25, 0x2F);
+
+        cpu.load_y_absolute_x();
+        assert_eq!(0x2F, cpu.y);
+
     }
 
     #[test]
