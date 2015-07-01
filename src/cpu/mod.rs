@@ -39,7 +39,11 @@ impl Cpu {
     }
 
     pub fn execute_instruction(&mut self) {
-
+        println!("PC: {:x}\tA {:x}\tP: {:x}\tX: {:x}",
+            self.program_counter,
+            self.a,
+            self.status_flags & 0xEF,
+            self.x);
         let instruction = self.memory.borrow_mut().read(self.program_counter);
         self.program_counter += 1;
         match instruction {
@@ -433,13 +437,6 @@ impl Cpu {
         // clear carry, negative, overflow and zero flags
         self.status_flags = self.status_flags & 0x3C;
 
-        // set zero flag if result is zero
-        // important: do before casting to u8; if bit 9 is set
-        // result is not considered to be zero
-        if result == 0 {
-            self.status_flags = self.status_flags | 0x02;
-        }
-
         // if result is greater than 255, set carry flag
         if result > 255 {
             self.status_flags = self.status_flags | 0x01;
@@ -454,8 +451,8 @@ impl Cpu {
             self.status_flags = self.status_flags | 0x40;
         }
 
-        // finally set negative flag if necessary
-        self.set_negative_flag(result as u8);
+        // finally set negative and zero flags if necessary
+        self.set_load_flags(result as u8);
 
         self.a = result as u8;
     }
@@ -2242,13 +2239,23 @@ mod tests {
     }
 
     #[test]
-    fn do_add_does_not_set_zero_flag_on_overflow() {
+    fn do_add_sets_zero_flag_if_negative_and_positive_number_end_up_as_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.a = 1;
-        cpu.do_add(255);
+        cpu.a = 27;
+        cpu.do_add(229);
 
-        assert_eq!(0x00, cpu.status_flags & 0x02);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_add_sets_zero_flag_if_result_is_zero_after_adding_carry() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 0x7F;
+        cpu.do_add(0x80);
+
+        assert_eq!(0x02, cpu.status_flags & 0x02);
     }
 
     #[test]
