@@ -383,11 +383,11 @@ impl Cpu {
         let result = register as i16 - operand as i16;
 
         if result < 0 {
-            self.status_flags = self.status_flags | ((result as u16 & 0xFF) as u8 & 0x80);
+            self.status_flags = self.status_flags | (result as u16 & 0x80) as u8;
         } else if result == 0 {
             self.status_flags = self.status_flags | 0x03;
         } else {
-            self.status_flags = self.status_flags | 0x01 | ((result as u16 & 0xFF) as u8 & 0x80);
+            self.status_flags = self.status_flags | 0x01 | (result as u16 & 0x80) as u8;
         }
     }
 
