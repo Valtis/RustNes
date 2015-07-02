@@ -68,6 +68,7 @@ impl Cpu {
             56 => self.set_carry_flag(),
             57 => self.and_absolute_y(),
             61 => self.and_absolute_x(),
+            64 => self.return_from_interrupt(),
             65 => self.exclusive_or_indirect_x(),
             69 => self.exclusive_or_zero_page(),
             72 => self.push_accumulator(),
@@ -669,6 +670,17 @@ impl Cpu {
         let low_byte = self.pop_value_from_stack() as u16;
         let high_byte = self.pop_value_from_stack() as u16;
         self.program_counter = ((high_byte << 8) | low_byte) + 1;
+    }
+
+    fn return_from_interrupt(&mut self) {
+        self.wait_counter = 6;
+
+        let flags = self.pop_value_from_stack();
+        let low_byte = self.pop_value_from_stack() as u16;
+        let high_byte = self.pop_value_from_stack() as u16;
+
+        self.program_counter = ((high_byte << 8) | low_byte);
+        self.status_flags = flags & 0xCF | (self.status_flags & 0x30); // flags 4 & 5 are ignored
     }
 
     fn bit_test_zero_page(&mut self) {
@@ -3404,6 +3416,49 @@ mod tests {
     fn return_from_subroutine_takes_6_cycles() {
         let mut cpu = create_test_cpu();
         cpu.return_from_subroutine();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn return_from_interrupt_sets_the_program_counter_correctly() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x10;
+        cpu.program_counter = 0x10;
+        cpu.push_value_into_stack(0xD8); // high byte
+        cpu.push_value_into_stack(0xBE); // low byte
+        cpu.push_value_into_stack(0x13);
+
+        cpu.return_from_interrupt();
+
+        assert_eq!(0xD8BE, cpu.program_counter);
+    }
+
+    #[test]
+    fn return_from_interrupt_increments_stack_pointer_by_3() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x10;
+        cpu.return_from_interrupt();
+        assert_eq!(0x10 + 3, cpu.stack_pointer);
+    }
+
+    #[test]
+    fn return_from_interrupt_sets_status_flags_to_value_from_stack_but_ignore_bits_4_and_5() {
+        let mut cpu = create_test_cpu();
+
+        cpu.stack_pointer = 0x10;
+        cpu.status_flags = 0x01;
+
+        cpu.push_value_into_stack(0xFE);
+
+        cpu.return_from_interrupt();
+        assert_eq!(0xCE, cpu.status_flags);
+    }
+
+    #[test]
+    fn return_from_interrupt_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x10;
+        cpu.return_from_interrupt();
         assert_eq!(6, cpu.wait_counter);
     }
 
