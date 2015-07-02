@@ -102,6 +102,7 @@ impl Cpu {
             104 => self.pull_accumulator(),
             105 => self.add_immediate(),
             106 => self.rotate_right_accumulator(),
+            108 => self.jump_indirect(),
             109 => self.add_absolute(),
             110 => self.rotate_right_absolute(),
             112 => self.branch_if_overflow_set(),
@@ -714,6 +715,15 @@ impl Cpu {
     fn jump_absolute(&mut self) {
         self.wait_counter = 3;
         self.program_counter = self.get_absolute_address();
+    }
+
+    fn jump_indirect(&mut self) {
+        self.wait_counter = 5;
+        let indirect_address = self.get_absolute_address();
+        let low_byte = self.memory.borrow_mut().read(indirect_address) as u16;
+        let high_byte = self.memory.borrow_mut().read(indirect_address + 1) as u16;
+        let address = (high_byte << 8) | low_byte;
+        self.program_counter = address;
     }
 
     fn jump_to_subroutine(&mut self) {
@@ -3995,7 +4005,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0, 0x15);
         cpu.memory.borrow_mut().write(1, 0xF0);
         cpu.jump_absolute();
-        assert_eq!(0xf015, cpu.program_counter);
+        assert_eq!(0xF015, cpu.program_counter);
     }
 
     #[test]
@@ -4004,6 +4014,28 @@ mod tests {
 
         cpu.jump_absolute();
         assert_eq!(3, cpu.wait_counter);
+    }
+
+    #[test]
+    fn jump_indirect_sets_program_counter_to_new_value() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 5;
+        cpu.memory.borrow_mut().write(5, 0x15);
+        cpu.memory.borrow_mut().write(6, 0xF0);
+
+        cpu.memory.borrow_mut().write(0xF015, 0xBA);
+        cpu.memory.borrow_mut().write(0xF016, 0x0D);
+
+        cpu.jump_indirect();
+        assert_eq!(0x0DBA, cpu.program_counter);
+    }
+
+    #[test]
+    fn jump_indirect_sets_wait_counter_correctly() {
+        let mut cpu = create_test_cpu();
+
+        cpu.jump_indirect();
+        assert_eq!(5, cpu.wait_counter);
     }
 
     #[test]
