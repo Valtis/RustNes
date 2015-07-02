@@ -71,15 +71,20 @@ impl Cpu {
             64 => self.return_from_interrupt(),
             65 => self.exclusive_or_indirect_x(),
             69 => self.exclusive_or_zero_page(),
+            70 => self.logical_shift_right_zero_page(),
             72 => self.push_accumulator(),
             73 => self.exclusive_or_immediate(),
+            74 => self.logical_shift_right_accumulator(),
             76 => self.jump_absolute(),
             77 => self.exclusive_or_absolute(),
+            78 => self.logical_shift_right_absolute(),
             80 => self.branch_if_overflow_clear(),
             81 => self.exclusive_or_indirect_y(),
             85 => self.exclusive_or_zero_page_x(),
+            86 => self.logical_shift_right_zero_page_x(),
             89 => self.exclusive_or_absolute_y(),
             93 => self.exclusive_or_absolute_x(),
+            94 => self.logical_shift_right_absolute_x(),
             96 => self.return_from_subroutine(),
             97 => self.add_indirect_x(),
             101 => self.add_zero_page(),
@@ -456,12 +461,7 @@ impl Cpu {
     }
 
     fn do_add(&mut self, operand: u8) {
-        let mut result = self.a as u16 + operand as u16;
-
-        // if carry is set, add 1 to result
-        if self.status_flags & 0x01 == 0x01 {
-            result += 1;
-        }
+        let mut result = self.a as u16 + operand as u16 + (self.status_flags & 0x01) as u16;
 
         // clear carry, negative, overflow and zero flags
         self.status_flags = self.status_flags & 0x3C;
@@ -488,6 +488,13 @@ impl Cpu {
 
     fn do_subtract(&mut self, operand: u8) {
         self.do_add(255 - operand);
+    }
+
+    fn do_logical_shift_right(&mut self, operand: u8) -> u8 {
+        let result = operand >> 1;
+        self.set_zero_negative_flags(result);
+        self.status_flags = (self.status_flags & 0xFE) | (operand & 0x01);
+        result
     }
 
     fn and_immediate(&mut self) {
@@ -691,6 +698,48 @@ impl Cpu {
     fn bit_test_absolute(&mut self) {
         let operand = self.read_absolute();
         self.do_bit_test(operand);
+    }
+
+    fn logical_shift_right_accumulator(&mut self) {
+        self.wait_counter = 2;
+        let value = self.a;
+        self.a = self.do_logical_shift_right(value);
+    }
+
+    fn logical_shift_right_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        let result = self.do_logical_shift_right(value);
+        // decrement PC so that store works
+        self.program_counter -= 1;
+        self.do_zero_page_store(result);
+        self.wait_counter = 5;
+    }
+
+    fn logical_shift_right_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        let result = self.do_logical_shift_right(value);
+        // decrement PC so that store works
+        self.program_counter -= 1;
+        self.do_zero_page_x_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn logical_shift_right_absolute(&mut self) {
+        let value = self.read_absolute();
+        let result = self.do_logical_shift_right(value);
+        // decrement PC so that store works
+        self.program_counter -= 2;
+        self.do_absolute_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn logical_shift_right_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        let result = self.do_logical_shift_right(value);
+        // decrement PC so that store works
+        self.program_counter -= 2;
+        self.do_absolute_x_store(result);
+        self.wait_counter = 7;
     }
 
     fn clear_carry_flag(&mut self) {
@@ -2818,6 +2867,79 @@ mod tests {
     }
 
     #[test]
+    fn do_right_bitshift_moves_bits_right_and_fills_bit_7_with_zero_when_it_was_0() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0x3D, cpu.do_logical_shift_right(0x7A));
+    }
+
+    #[test]
+    fn do_right_bitshift_moves_bits_right_and_fills_bit_7_with_zero_when_it_was_1() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0x7D, cpu.do_logical_shift_right(0xFA));
+    }
+
+    #[test]
+    fn do_right_bitshift_moves_bits_right_and_fills_bit_7_with_zero_when_it_was_0_and_bit_0_was_1() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0x3D, cpu.do_logical_shift_right(0x7B));
+    }
+
+    #[test]
+    fn do_right_bitshift_moves_bits_right_and_fills_bit_7_with_zero_when_it_was_1_and_bit_0_was_1() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0x7D, cpu.do_logical_shift_right(0xFB));
+    }
+
+    #[test]
+    fn do_right_bitshift_sets_carry_to_1_if_old_bit_0_was_1() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_logical_shift_right(0x7B);
+        assert_eq!(0x01, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_right_bitshift_sets_carry_to_0_if_old_bit_0_was_0() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.do_logical_shift_right(0x72);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_right_bitshift_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_logical_shift_right(0x01);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_right_bitshift_clears_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x02;
+        cpu.do_logical_shift_right(0xF0);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_right_bitshift_clears_negative_flag_if_original_was_positive() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x80;
+        cpu.do_logical_shift_right(0x70);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_right_bitshift_clears_negative_flag_if_original_was_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x80;
+        cpu.do_logical_shift_right(0xF0);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+
+    #[test]
     fn and_immediate_sets_accumulator_value_to_the_result() {
         let mut cpu = create_test_cpu();
         cpu.a = 0xE9;
@@ -3521,6 +3643,134 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.bit_test_absolute();
         assert_eq!(4, cpu.wait_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_accumulator_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0xE6;
+        cpu.logical_shift_right_accumulator();
+        assert_eq!(0x73, cpu.a);
+    }
+
+    #[test]
+    fn logical_right_shift_accumulator_does_not_modify_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x2442;
+        cpu.logical_shift_right_accumulator();
+        assert_eq!(0x2442, cpu.program_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_accumulator_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.logical_shift_right_accumulator();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_zero_page_modifies_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x0F40;
+        cpu.memory.borrow_mut().write(0x0F40, 0x70);
+        cpu.memory.borrow_mut().write(0x70, 0xE6);
+        cpu.logical_shift_right_zero_page();
+        assert_eq!(0x73, cpu.memory.borrow_mut().read(0x70));
+    }
+
+    #[test]
+    fn logical_right_shift_zero_page_does_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x2442;
+        cpu.logical_shift_right_zero_page();
+        assert_eq!(0x2443, cpu.program_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.logical_shift_right_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_zero_page_x_modifies_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x20;
+        cpu.program_counter = 0x0F40;
+        cpu.memory.borrow_mut().write(0x0F40, 0x70);
+        cpu.memory.borrow_mut().write(0x70 + 0x20, 0xE6);
+        cpu.logical_shift_right_zero_page_x();
+        assert_eq!(0x73, cpu.memory.borrow_mut().read(0x70 + 0x20));
+    }
+
+    #[test]
+    fn logical_right_shift_zero_page_x_does_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x2442;
+        cpu.logical_shift_right_zero_page_x();
+        assert_eq!(0x2443, cpu.program_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_zero_page_x_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.logical_shift_right_zero_page_x();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn logical_right_shift_absolute_modifies_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x0F40;
+        cpu.memory.borrow_mut().write(0x0F40, 0x70);
+        cpu.memory.borrow_mut().write(0x0F41, 0xB1);
+        cpu.memory.borrow_mut().write(0xB170, 0xE6);
+        cpu.logical_shift_right_absolute();
+        assert_eq!(0x73, cpu.memory.borrow_mut().read(0xB170));
+    }
+
+    #[test]
+    fn logical_right_shift_absolute_does_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x2442;
+        cpu.logical_shift_right_absolute();
+        assert_eq!(0x2444, cpu.program_counter);
+    }
+
+    #[test]
+    fn logical_right_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.logical_shift_right_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+
+    #[test]
+    fn logical_right_shift_absolute_x_modifies_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x20;
+        cpu.program_counter = 0x0F40;
+        cpu.memory.borrow_mut().write(0x0F40, 0x70);
+        cpu.memory.borrow_mut().write(0x0F41, 0xB1);
+        cpu.memory.borrow_mut().write(0xB170 + 0x20, 0xE6);
+        cpu.logical_shift_right_absolute_x();
+        assert_eq!(0x73, cpu.memory.borrow_mut().read(0xB170 + 0x20));
+    }
+
+    #[test]
+    fn logical_right_shift_absolute_x_does_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x2442;
+        cpu.logical_shift_right_absolute_x();
+        assert_eq!(0x2444, cpu.program_counter);
+    }
+
+    #[test]
+    fn logical_right_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.logical_shift_right_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
     }
 
     #[test]
