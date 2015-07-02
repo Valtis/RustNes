@@ -720,8 +720,17 @@ impl Cpu {
     fn jump_indirect(&mut self) {
         self.wait_counter = 5;
         let indirect_address = self.get_absolute_address();
+
+        // 6502 has a bug where high byte is fetched incorrectly when low byte resides
+        // at xxFF. The high byte is incorrectly fetched from xx00 instead of
+        // the beginning of the next page
         let low_byte = self.memory.borrow_mut().read(indirect_address) as u16;
-        let high_byte = self.memory.borrow_mut().read(indirect_address + 1) as u16;
+        let high_byte = if indirect_address & 0x00FF == 0x00FF {
+            self.memory.borrow_mut().read(indirect_address - 255) as u16
+        } else {
+            self.memory.borrow_mut().read(indirect_address + 1) as u16
+        };
+
         let address = (high_byte << 8) | low_byte;
         self.program_counter = address;
     }
@@ -4028,6 +4037,21 @@ mod tests {
 
         cpu.jump_indirect();
         assert_eq!(0x0DBA, cpu.program_counter);
+    }
+
+    #[test]
+    fn jump_indirect_handles_6502_indirect_bug() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 5;
+        cpu.memory.borrow_mut().write(5, 0xFF);
+        cpu.memory.borrow_mut().write(6, 0xF0);
+
+        cpu.memory.borrow_mut().write(0xF0FF, 0xBA);
+        cpu.memory.borrow_mut().write(0xF100, 0x0D);
+        cpu.memory.borrow_mut().write(0xF000, 0xDB);
+
+        cpu.jump_indirect();
+        assert_eq!(0xDBBA, cpu.program_counter);
     }
 
     #[test]
