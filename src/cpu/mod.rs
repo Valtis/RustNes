@@ -300,24 +300,24 @@ impl Cpu {
         self.memory.borrow_mut().read(final_address)
     }
 
-    fn set_load_flags(&mut self, value: u8) {
+    fn set_zero_negative_flags(&mut self, value: u8) {
         self.set_negative_flag(value);
         self.set_zero_flag(value);
     }
 
     fn load_a(&mut self, value: u8) {
         self.a = value;
-        self.set_load_flags(value);
+        self.set_zero_negative_flags(value);
     }
 
     fn load_x(&mut self, value: u8) {
         self.x = value;
-        self.set_load_flags(value);
+        self.set_zero_negative_flags(value);
     }
 
     fn load_y(&mut self, value: u8) {
         self.y = value;
-        self.set_load_flags(value);
+        self.set_zero_negative_flags(value);
     }
 
     fn do_zero_page_store(&mut self, value: u8) {
@@ -385,19 +385,19 @@ impl Cpu {
     fn do_and(&mut self, operand: u8) {
         self.a = self.a & operand;
         let result = self.a;
-        self.set_load_flags(result);
+        self.set_zero_negative_flags(result);
     }
 
     fn do_inclusive_or(&mut self, operand: u8) {
         self.a = self.a | operand;
         let result = self.a;
-        self.set_load_flags(result);
+        self.set_zero_negative_flags(result);
     }
 
     fn do_exclusive_or(&mut self, operand: u8) {
         self.a = self.a ^ operand;
         let result = self.a;
-        self.set_load_flags(result);
+        self.set_zero_negative_flags(result);
     }
 
     fn do_compare(&mut self, register: u8, operand: u8) {
@@ -471,7 +471,7 @@ impl Cpu {
         }
 
         // finally set negative and zero flags if necessary
-        self.set_load_flags(result as u8);
+        self.set_zero_negative_flags(result as u8);
 
         self.a = result as u8;
     }
@@ -712,7 +712,7 @@ impl Cpu {
         self.wait_counter = 4;
         let value = self.pop_value_from_stack();
         self.a = value;
-        self.set_load_flags(value);
+        self.set_zero_negative_flags(value);
     }
 
     fn push_status_flags_into_stack(&mut self) {
@@ -877,7 +877,7 @@ impl Cpu {
         self.wait_counter = 2;
         self.a = self.y;
         let value = self.a;
-        self.set_load_flags(value);
+        self.set_zero_negative_flags(value);
     }
 
     fn compare_immediate(&mut self) {
@@ -1049,14 +1049,14 @@ impl Cpu {
         self.wait_counter = 2;
         let value = (self.x as u16) + 1;
         self.x = (value & 0xFF) as u8;
-        self.set_load_flags((value & 0xFF) as u8)
+        self.set_zero_negative_flags((value & 0xFF) as u8)
     }
 
     fn increase_y(&mut self) {
         self.wait_counter = 2;
         let value = (self.y as u16) + 1;
         self.y = (value & 0xFF) as u8;
-        self.set_load_flags((value & 0xFF) as u8)
+        self.set_zero_negative_flags((value & 0xFF) as u8)
     }
 
     fn no_operation(&mut self) {
@@ -1224,34 +1224,34 @@ mod tests {
 
 
     #[test]
-    fn set_load_flags_sets_negative_flag_if_bit_set() {
+    fn set_zero_negative_flags_sets_negative_flag_if_bit_set() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.set_load_flags(0x80);
+        cpu.set_zero_negative_flags(0x80);
         assert_eq!(0x80, cpu.status_flags);
     }
 
     #[test]
-    fn set_load_flags_clears_negative_flag_if_bit_is_unset() {
+    fn set_zero_negative_flags_clears_negative_flag_if_bit_is_unset() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
-        cpu.set_load_flags(0x40);
+        cpu.set_zero_negative_flags(0x40);
         assert_eq!(0x00, cpu.status_flags);
     }
 
     #[test]
-    fn set_load_flags_set_zero_flag_if_value_is_zero() {
+    fn set_zero_negative_flags_set_zero_flag_if_value_is_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.set_load_flags(0x00);
+        cpu.set_zero_negative_flags(0x00);
         assert_eq!(0x02, cpu.status_flags);
     }
 
     #[test]
-    fn set_load_flags_clears_zero_flag_if_value_is_nonzero() {
+    fn set_zero_negative_flags_clears_zero_flag_if_value_is_nonzero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
-        cpu.set_load_flags(0x04);
+        cpu.set_zero_negative_flags(0x04);
         assert_eq!(0x00, cpu.status_flags);
     }
 
