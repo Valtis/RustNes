@@ -34,8 +34,8 @@ impl Cpu {
     }
 
     pub fn reset(&mut self) {
-        /*self.program_counter = 0xFFFC;
-        self.jump_absolute();*/
+        self.program_counter = 0xFFFC;
+        self.jump_absolute();
     }
 
     pub fn execute_instruction(&mut self) {
@@ -100,6 +100,7 @@ impl Cpu {
             145 => self.store_a_indirect_y(),
             149 => self.store_a_zero_page_x(),
             150 => self.store_x_zero_page_y(),
+            152 => self.transfer_y_to_accumulator(),
             153 => self.store_a_absolute_y(),
             154 => self.transfer_x_to_stack_pointer(),
             157 => self.store_a_absolute_x(),
@@ -872,6 +873,13 @@ impl Cpu {
         self.stack_pointer = self.x;
     }
 
+    fn transfer_y_to_accumulator(&mut self) {
+        self.wait_counter = 2;
+        self.a = self.y;
+        let value = self.a;
+        self.set_load_flags(value);
+    }
+
     fn compare_immediate(&mut self) {
         let register = self.a;
         let operand = self.read_immediate();
@@ -1038,12 +1046,14 @@ impl Cpu {
     }
 
     fn increase_x(&mut self) {
+        self.wait_counter = 2;
         let value = (self.x as u16) + 1;
         self.x = (value & 0xFF) as u8;
         self.set_load_flags((value & 0xFF) as u8)
     }
 
     fn increase_y(&mut self) {
+        self.wait_counter = 2;
         let value = (self.y as u16) + 1;
         self.y = (value & 0xFF) as u8;
         self.set_load_flags((value & 0xFF) as u8)
@@ -1124,7 +1134,7 @@ mod tests {
     }
 
     #[test]
-    fn set_negative_flag_unsets_the_flag_if_flag_is_set_and_value_was_positive() {
+    fn set_negative_flag_clears_the_flag_if_flag_is_set_and_value_was_positive() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xD0;
         cpu.set_negative_flag(0x05);
@@ -1156,7 +1166,7 @@ mod tests {
     }
 
     #[test]
-    fn set_zero_flag_unsets_the_flag_if_flag_is_set_and_value_was_not_zero() {
+    fn set_zero_flag_clears_the_flag_if_flag_is_set_and_value_was_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xDF;
         cpu.set_zero_flag(0x05);
@@ -1222,7 +1232,7 @@ mod tests {
     }
 
     #[test]
-    fn set_load_flags_unsets_negative_flag_if_bit_is_unset() {
+    fn set_load_flags_clears_negative_flag_if_bit_is_unset() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
         cpu.set_load_flags(0x40);
@@ -1238,7 +1248,7 @@ mod tests {
     }
 
     #[test]
-    fn set_load_flags_unsets_zero_flag_if_value_is_nonzero() {
+    fn set_load_flags_clears_zero_flag_if_value_is_nonzero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.set_load_flags(0x04);
@@ -1856,7 +1866,7 @@ mod tests {
     }
 
     #[test]
-    fn do_and_unsets_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
+    fn do_and_clears_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.a = 0xE9;
         cpu.status_flags = 0x02;
@@ -1910,7 +1920,7 @@ mod tests {
     }
 
     #[test]
-    fn do_and_unsets_negative_flag_if_flag_is_set_and_number_is_not_negative() {
+    fn do_and_clears_negative_flag_if_flag_is_set_and_number_is_not_negative() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x80;
         cpu.status_flags = 0xAF;
@@ -1960,7 +1970,7 @@ mod tests {
     }
 
     #[test]
-    fn do_inclusive_or_unsets_negative_flag_if_result_is_not_negative() {
+    fn do_inclusive_or_clears_negative_flag_if_result_is_not_negative() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
         cpu.a = 0x00;
@@ -1978,7 +1988,7 @@ mod tests {
     }
 
     #[test]
-    fn do_inclusive_or_unsets_zero_flag_if_result_is_not_zero() {
+    fn do_inclusive_or_clears_zero_flag_if_result_is_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.a = 0x40;
@@ -2010,7 +2020,7 @@ mod tests {
     }
 
     #[test]
-    fn do_exclusive_or_unsets_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
+    fn do_exclusive_or_clears_zero_flag_if_it_was_set_before_and_result_is_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x09;
         cpu.status_flags = 0x02;
@@ -2064,7 +2074,7 @@ mod tests {
     }
 
     #[test]
-    fn do_exclusive_or_unsets_negative_flag_if_flag_is_set_and_number_is_not_negative() {
+    fn do_exclusive_or_clears_negative_flag_if_flag_is_set_and_number_is_not_negative() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x8F;
         cpu.status_flags = 0xA0;
@@ -2138,7 +2148,7 @@ mod tests {
     }
 
     #[test]
-    fn do_compare_unsets_carry_and_zero_flag_if_register_is_smaller_and_subtraction_result_is_negative() {
+    fn do_compare_clears_carry_and_zero_flag_if_register_is_smaller_and_subtraction_result_is_negative() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x03;
         cpu.do_compare(0x83, 0x90);
@@ -2146,7 +2156,7 @@ mod tests {
     }
 
     #[test]
-    fn do_compare_unsets_carry_zero_and_negative_flag_if_register_is_smaller_and_subtraction_result_is_positive_due_to_overflow() {
+    fn do_compare_clears_carry_zero_and_negative_flag_if_register_is_smaller_and_subtraction_result_is_positive_due_to_overflow() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x83;
         cpu.do_compare(0x00, 0xFF);
@@ -2154,7 +2164,7 @@ mod tests {
     }
 
     #[test]
-    fn do_compare_unsets_negative_flag_and_sets_carry_and_zero_flags_if_result_is_equal_and_negative_was_set_before() {
+    fn do_compare_clears_negative_flag_and_sets_carry_and_zero_flags_if_result_is_equal_and_negative_was_set_before() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xEC;
         cpu.do_compare(0xFF, 0xFF);
@@ -2270,7 +2280,7 @@ mod tests {
     }
 
     #[test]
-    fn do_bit_test_unsets_negative_flag_if_bit_is_not_set_and_flag_is_set() {
+    fn do_bit_test_clears_negative_flag_if_bit_is_not_set_and_flag_is_set() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x0F;
         cpu.status_flags = 0x81;
@@ -2317,7 +2327,7 @@ mod tests {
 
 
     #[test]
-    fn do_bit_test_unsets_overflow_bit_if_overflow_bit_is_not_set_and_flag_is_set() {
+    fn do_bit_test_clears_overflow_bit_if_overflow_bit_is_not_set_and_flag_is_set() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x44;
         cpu.a = 0x0F;
@@ -2353,7 +2363,7 @@ mod tests {
     }
 
     #[test]
-    fn do_bit_test_unsets_zero_flag_if_result_is_not_zero() {
+    fn do_bit_test_clears_zero_flag_if_result_is_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.a = 0x0A;
@@ -2423,7 +2433,7 @@ mod tests {
     }
 
     #[test]
-    fn do_add_unsets_zero_flag_if_flag_is_set_and_result_is_not_zero() {
+    fn do_add_clears_zero_flag_if_flag_is_set_and_result_is_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.a = 40;
@@ -2514,7 +2524,7 @@ mod tests {
     }
 
     #[test]
-    fn do_add_with_unsets_overflow_flag_if_result_does_not_overflow() {
+    fn do_add_with_clears_overflow_flag_if_result_does_not_overflow() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x40;
         cpu.a = 10;
@@ -2649,7 +2659,7 @@ mod tests {
     }
 
     #[test]
-    fn do_subtract_unsets_zero_flag_if_result_is_non_zero() {
+    fn do_subtract_clears_zero_flag_if_result_is_non_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x03;
         cpu.a = 40;
@@ -2676,7 +2686,7 @@ mod tests {
     }
 
     #[test]
-    fn do_subtract_unsets_overflow_flag_if_accumulator_was_positive_and_result_is_positive_and_fits() {
+    fn do_subtract_clears_overflow_flag_if_accumulator_was_positive_and_result_is_positive_and_fits() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x43;
         cpu.a = 80;
@@ -2685,7 +2695,7 @@ mod tests {
     }
 
     #[test]
-    fn do_subtract_unsets_overflow_flag_if_accumulator_was_positive_and_result_is_negative_and_fits() {
+    fn do_subtract_clears_overflow_flag_if_accumulator_was_positive_and_result_is_negative_and_fits() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x43;
         cpu.a = 80;
@@ -2694,7 +2704,7 @@ mod tests {
     }
 
     #[test]
-    fn do_subtract_unsets_overflow_flag_if_accumulator_was_negative_and_result_is_negative_and_fits() {
+    fn do_subtract_clears_overflow_flag_if_accumulator_was_negative_and_result_is_negative_and_fits() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x43;
         cpu.a = 0xFF;
@@ -2703,7 +2713,7 @@ mod tests {
     }
 
     #[test]
-    fn do_subtract_unsets_overflow_flag_if_accumulator_was_negative_and_result_is_positive_and_fits() {
+    fn do_subtract_clears_overflow_flag_if_accumulator_was_negative_and_result_is_positive_and_fits() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x43;
         cpu.a = 0xFF;
@@ -2721,7 +2731,7 @@ mod tests {
     }
 
     #[test]
-    fn do_subtract_unsets_negative_flag_if_end_result_is_negative() {
+    fn do_subtract_clears_negative_flag_if_end_result_is_negative() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x03;
         cpu.a = 4;
@@ -3619,7 +3629,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_accumulator_unsets_zero_flag_if_value_pulled_was_not_zero() {
+    fn pull_accumulator_clears_zero_flag_if_value_pulled_was_not_zero() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x00;
         cpu.status_flags = 0xAA;
@@ -3639,7 +3649,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_accumulator_unsets_negative_flag_if_value_pulled_was_not_negative() {
+    fn pull_accumulator_clears_negative_flag_if_value_pulled_was_not_negative() {
         let mut cpu = create_test_cpu();
         cpu.a = 0xAA;
         cpu.status_flags = 0x80;
@@ -4115,6 +4125,63 @@ mod tests {
     }
 
     #[test]
+    fn transfer_y_to_accumulator_sets_accumulator_value_to_correct_value() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x2F;
+        cpu.a = 0x01;
+        cpu.transfer_y_to_accumulator();
+        assert_eq!(0x2F, cpu.a);
+    }
+
+    #[test]
+    fn transfer_y_to_accumulator_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x00;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_y_to_accumulator();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_y_to_accumulator_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x05;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x02;
+        cpu.transfer_y_to_accumulator();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_y_to_accumulator_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0xF0;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_y_to_accumulator();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_y_to_accumulator_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x05;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x80;
+        cpu.transfer_y_to_accumulator();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_y_to_accumulator_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+
+        cpu.transfer_y_to_accumulator();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
     fn compare_immediate_sets_carry_flag_if_accumulator_is_greater() {
         let mut cpu = create_test_cpu();
 
@@ -4141,7 +4208,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_immediate_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_immediate_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4182,7 +4249,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_zero_page_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_zero_page_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4226,7 +4293,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_zero_page_x_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_zero_page_x_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4271,7 +4338,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_absolute_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_absolute_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4318,7 +4385,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_absolute_x_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_absolute_x_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.x = 0xFA;
@@ -4366,7 +4433,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_absolute_y_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_absolute_y_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.y = 0xFA;
@@ -4422,7 +4489,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_indirect_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_indirect_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.x = 0xBA;
@@ -4481,7 +4548,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_indirect_y_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_indirect_y_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.y = 0xBA;
@@ -4525,7 +4592,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_x_immediate_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_x_immediate_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4566,7 +4633,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_x_zero_page_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_x_zero_page_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4610,7 +4677,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_x_absolute_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_x_absolute_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4652,7 +4719,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_y_immediate_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_y_immediate_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4693,7 +4760,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_y_zero_page_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_y_zero_page_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -4737,7 +4804,7 @@ mod tests {
     }
 
     #[test]
-    fn compare_y_absolute_unsets_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
+    fn compare_y_absolute_clears_carry_zero_flags_and_sets_negative_if_accumulator_is_smaller() {
         let mut cpu = create_test_cpu();
 
         cpu.status_flags = 0x03;
@@ -5032,7 +5099,7 @@ mod tests {
     }
 
     #[test]
-    fn increase_x_unsets_negative_flag_if_result_is_positive() {
+    fn increase_x_clears_negative_flag_if_result_is_positive() {
         let mut cpu = create_test_cpu();
 
         cpu.x = 0x5;
@@ -5052,13 +5119,20 @@ mod tests {
     }
 
     #[test]
-    fn increase_x_unsets_zero_flag_if_result_is_non_zero() {
+    fn increase_x_clears_zero_flag_if_result_is_non_zero() {
         let mut cpu = create_test_cpu();
 
         cpu.x = 0x05;
         cpu.status_flags = 0x02;
         cpu.increase_x();
         assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_x_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.increase_x();
+        assert_eq!(2, cpu.wait_counter);
     }
 
     #[test]
@@ -5091,7 +5165,7 @@ mod tests {
     }
 
     #[test]
-    fn increase_y_unsets_negative_flag_if_result_is_positive() {
+    fn increase_y_clears_negative_flag_if_result_is_positive() {
         let mut cpu = create_test_cpu();
 
         cpu.y = 0x5;
@@ -5111,13 +5185,20 @@ mod tests {
     }
 
     #[test]
-    fn increase_y_unsets_zero_flag_if_result_is_non_zero() {
+    fn increase_y_clears_zero_flag_if_result_is_non_zero() {
         let mut cpu = create_test_cpu();
 
         cpu.y = 0x05;
         cpu.status_flags = 0x02;
         cpu.increase_y();
         assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn increase_y_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.increase_y();
+        assert_eq!(2, cpu.wait_counter);
     }
 
     #[test]
