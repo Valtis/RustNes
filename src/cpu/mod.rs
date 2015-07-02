@@ -44,6 +44,7 @@ impl Cpu {
 
         self.program_counter += 1;
         match instruction {
+            0 => self.force_interrupt(),
             1 => self.inclusive_or_indirect_x(),
             4 => self.unofficial_double_no_operation(3),
             5 => self.inclusive_or_zero_page(),
@@ -252,17 +253,18 @@ impl Cpu {
         (self.get_zero_page_address() + offset)  & 0x00FF
     }
 
+    // must handle pc wrapping, as 0xFFFE\0xFFFF stores interrupt vector
     fn get_absolute_address(&mut self) -> u16 {
         let low_byte = self.memory.borrow_mut().read(self.program_counter);
         self.program_counter += 1;
         let high_byte = self.memory.borrow_mut().read(self.program_counter);
-        self.program_counter += 1;
+        self.program_counter = ((self.program_counter as u32 + 1) & 0xFFFF) as u16;
 
          ((high_byte as u16) << 8) | low_byte as u16
     }
 
     fn get_absolute_address_with_offset(&mut self, offset: u16) -> u16 {
-        self.get_absolute_address() + offset
+        ((self.get_absolute_address() as u32 + offset as u32) & 0xFFFF) as u16
     }
 
     fn get_indirect_x_address(&mut self) -> u16 {
@@ -780,6 +782,19 @@ impl Cpu {
         self.program_counter = ((high_byte << 8) | low_byte) + 1;
     }
 
+    fn force_interrupt(&mut self) {
+        let return_address = self.program_counter;
+        self.push_value_into_stack(((return_address & 0xFF00) >> 8) as u8);
+        self.push_value_into_stack((return_address & 0xFF) as u8);
+
+        let flags = self.status_flags | 0x30; // bit 5 and 4 must be set
+        self.push_value_into_stack(flags);
+        self.program_counter = 0xFFFE;
+
+        self.jump_absolute();
+        self.wait_counter = 7;
+    }
+
     fn return_from_interrupt(&mut self) {
         self.wait_counter = 6;
 
@@ -790,6 +805,7 @@ impl Cpu {
         self.program_counter = ((high_byte << 8) | low_byte);
         self.status_flags = flags & 0xCF | (self.status_flags & 0x30); // flags 4 & 5 are ignored
     }
+
 
     fn bit_test_zero_page(&mut self) {
         let operand = self.read_zero_page();
@@ -1754,6 +1770,16 @@ mod tests {
     }
 
     #[test]
+    fn get_absolute_address_handles_program_counter_wrapping() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFFFE;
+        cpu.memory.borrow_mut().write(0xFFFE, 0xBE);
+        cpu.memory.borrow_mut().write(0xFFFF, 0xBA);
+        assert_eq!(0xBABE, cpu.get_absolute_address());
+        assert_eq!(0, cpu.program_counter);
+    }
+
+    #[test]
     fn get_absolute_address_with_offset_returns_correct_address() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x243;
@@ -1761,7 +1787,15 @@ mod tests {
         cpu.memory.borrow_mut().write(0x244, 0xBA);
         assert_eq!(0xBABE + 0x43, cpu.get_absolute_address_with_offset(0x43));
     }
+    #[test]
 
+    fn get_absolute_address_with_offset_hans() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x243;
+        cpu.memory.borrow_mut().write(0x243, 0xFF);
+        cpu.memory.borrow_mut().write(0x244, 0xFF);
+        assert_eq!(0x42, cpu.get_absolute_address_with_offset(0x43));
+    }
     #[test]
     fn get_indirect_x_address_returns_correct_address() {
         let mut cpu = create_test_cpu();
@@ -4170,6 +4204,68 @@ mod tests {
         cpu.stack_pointer = 0xFF;
         cpu.jump_to_subroutine();
         assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn force_interrupt_jumps_to_address_stored_at_interrupt_vector() {
+
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x40;
+        cpu.program_counter = 0x40;
+
+        cpu.memory.borrow_mut().write(0xFFFE, 0x20);
+        cpu.memory.borrow_mut().write(0xFFFF, 0xA3);
+
+        cpu.force_interrupt();
+        assert_eq!(0xA320, cpu.program_counter);
+    }
+
+    #[test]
+    fn force_interrupt_pushes_3_values_into_stack() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x40;
+        cpu.force_interrupt();
+        assert_eq!(0x3D, cpu.stack_pointer);
+    }
+
+    #[test]
+    fn force_interrupt_pushes_status_flags_to_top_of_stack_with_bits_4_and_5_set() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x40;
+        cpu.status_flags = 0x82;
+        cpu.force_interrupt();
+        assert_eq!(0x82 | 0x30, cpu.pop_value_from_stack());
+    }
+
+    #[test]
+    fn force_interrupt_pushes_old_pc_before_status_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xA0EF;
+        cpu.stack_pointer = 0x40;
+        cpu.status_flags = 0x82;
+        cpu.force_interrupt();
+
+        cpu.pop_value_from_stack();
+
+        assert_eq!(0xEF, cpu.pop_value_from_stack());
+        assert_eq!(0xA0, cpu.pop_value_from_stack());
+    }
+
+    #[test]
+    fn force_interrupt_does_not_modify_status_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x80;
+        cpu.status_flags = 0x0A;
+        cpu.force_interrupt();
+        assert_eq!(0x0A, cpu.status_flags);
+    }
+
+    #[test]
+    fn force_interrupt_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x80;
+        cpu.force_interrupt();
+        assert_eq!(7, cpu.wait_counter);
     }
 
     #[test]
