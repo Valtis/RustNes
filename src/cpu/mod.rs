@@ -45,15 +45,20 @@ impl Cpu {
         match instruction {
             1 => self.inclusive_or_indirect_x(),
             5 => self.inclusive_or_zero_page(),
+            6 => self.arithmetic_shift_left_zero_page(),
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
+            10 => self.arithmetic_shift_left_accumulator(),
             13 => self.inclusive_or_absolute(),
+            14 => self.arithmetic_shift_left_absolute(),
             16 => self.branch_if_positive(),
             17 => self.inclusive_or_indirect_y(),
             21 => self.inclusive_or_zero_page_x(),
+            22 => self.arithmetic_shift_left_zero_page_x(),
             24 => self.clear_carry_flag(),
             25 => self.inclusive_or_absolute_y(),
             29 => self.inclusive_or_absolute_x(),
+            30 => self.arithmetic_shift_left_absolute_x(),
             32 => self.jump_to_subroutine(),
             33 => self.and_indirect_x(),
             36 => self.bit_test_zero_page(),
@@ -524,6 +529,9 @@ impl Cpu {
         result
     }
 
+    fn do_arithmetic_shift_left(&mut self, operand: u8) -> u8 {
+        self.do_rotate_left(operand) & 0xFE
+    }
 
     fn and_immediate(&mut self) {
         let operand = self.read_immediate();
@@ -850,6 +858,48 @@ impl Cpu {
         // move program counter back so that store works
         self.program_counter -= 2;
         let result = self.do_rotate_left(value);
+        self.do_absolute_x_store(result);
+        self.wait_counter = 7;
+    }
+
+    fn arithmetic_shift_left_accumulator(&mut self) {
+        self.wait_counter = 2;
+        let value = self.a;
+        self.a = self.do_arithmetic_shift_left(value);
+    }
+
+    fn arithmetic_shift_left_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        // move program counter back so that store works
+        self.program_counter -= 1;
+        let result = self.do_arithmetic_shift_left(value);
+        self.do_zero_page_store(result);
+        self.wait_counter = 5;
+    }
+
+    fn arithmetic_shift_left_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        // move program counter back so that store works
+        self.program_counter -= 1;
+        let result = self.do_arithmetic_shift_left(value);
+        self.do_zero_page_x_store(result);
+        self.wait_counter = 5;
+    }
+
+    fn arithmetic_shift_left_absolute(&mut self) {
+        let value = self.read_absolute();
+        // move program counter back so that store works
+        self.program_counter -= 2;
+        let result = self.do_arithmetic_shift_left(value);
+        self.do_absolute_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn arithmetic_shift_left_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        // move program counter back so that store works
+        self.program_counter -= 2;
+        let result = self.do_arithmetic_shift_left(value);
         self.do_absolute_x_store(result);
         self.wait_counter = 7;
     }
@@ -3134,7 +3184,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_sets_bit_0_to_carry() {
+    fn rotate_left_sets_bit_0_to_1_if_carry_is_set() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x01;
         assert_eq!(0xE7, cpu.do_rotate_left(0x73));
@@ -3185,6 +3235,67 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.do_rotate_left(0x32);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_moves_bits_left() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0xE6, cpu.do_arithmetic_shift_left(0x73));
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_does_not_set_bit_0_even_if_carry_is_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        assert_eq!(0xE6, cpu.do_arithmetic_shift_left(0x73));
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_clears_carry_if_bit_7_is_0_before_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.do_arithmetic_shift_left(0x73);
+        assert_eq!(0x00, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_sets_carry_if_bit_7_is_1_before_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_arithmetic_shift_left(0xF3);
+        assert_eq!(0x01, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_sets_negative_flag_if_bit_7_is_set_after_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_arithmetic_shift_left(0x73);
+        assert_eq!(0x80, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_clears_negative_flag_if_bit_7_is_not_set_after_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x80;
+        cpu.do_arithmetic_shift_left(0x13);
+        assert_eq!(0x00, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_arithmetic_shift_left(0x80);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_arithmetic_shift_left_clears_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x02;
+        cpu.do_arithmetic_shift_left(0x32);
         assert_eq!(0x00, cpu.status_flags);
     }
 
@@ -4287,6 +4398,142 @@ mod tests {
     fn rotate_left_absolute_x_takes_7_cycles() {
         let mut cpu = create_test_cpu();
         cpu.rotate_left_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_accumulator_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 0x35;
+        cpu.arithmetic_shift_left_accumulator();
+        assert_eq!(0x6A, cpu.a);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_accumulator_does_not_modify_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.arithmetic_shift_left_accumulator();
+        assert_eq!(0x643, cpu.program_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_accumulator_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.arithmetic_shift_left_accumulator();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_zero_page_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xFE);
+        cpu.memory.borrow_mut().write(0xFE, 0x35);
+
+        cpu.arithmetic_shift_left_zero_page();
+        assert_eq!(0x6A, cpu.memory.borrow_mut().read(0xFE));
+    }
+
+    #[test]
+    fn arithmetic_shift_left_zero_page_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.arithmetic_shift_left_zero_page();
+        assert_eq!(0x644, cpu.program_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.arithmetic_shift_left_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_zero_page_x_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.x = 0x24;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xAE);
+        cpu.memory.borrow_mut().write(0xAE + 0x24, 0x35);
+
+        cpu.arithmetic_shift_left_zero_page_x();
+        assert_eq!(0x6A, cpu.memory.borrow_mut().read(0xAE + 0x24));
+    }
+
+    #[test]
+    fn arithmetic_shift_left_zero_x_page_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.arithmetic_shift_left_zero_page_x();
+        assert_eq!(0x644, cpu.program_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_zero_x_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.arithmetic_shift_left_zero_page_x();
+        assert_eq!(5, cpu.wait_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_absolute_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xFE);
+        cpu.memory.borrow_mut().write(0x235, 0xCA);
+        cpu.memory.borrow_mut().write(0xCAFE, 0x35);
+
+        cpu.arithmetic_shift_left_absolute();
+        assert_eq!(0x6A, cpu.memory.borrow_mut().read(0xCAFE));
+    }
+
+    #[test]
+    fn arithmetic_shift_left_absolute_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.arithmetic_shift_left_absolute();
+        assert_eq!(0x645, cpu.program_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.arithmetic_shift_left_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_left_absolute_x_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.x = 0x65;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xFE);
+        cpu.memory.borrow_mut().write(0x235, 0xCA);
+        cpu.memory.borrow_mut().write(0xCAFE + 0x65, 0x35);
+
+        cpu.arithmetic_shift_left_absolute_x();
+        assert_eq!(0x6A, cpu.memory.borrow_mut().read(0xCAFE + 0x65));
+    }
+
+    #[test]
+    fn arithmetic_shift_left_absolute_x_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.arithmetic_shift_left_absolute_x();
+        assert_eq!(0x645, cpu.program_counter);
+    }
+
+    #[test]
+    fn arithmetic_shift_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.arithmetic_shift_left_absolute_x();
         assert_eq!(7, cpu.wait_counter);
     }
 
