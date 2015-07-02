@@ -128,6 +128,7 @@ impl Cpu {
             182 => self.load_x_zero_page_y(),
             184 => self.clear_overflow_flag(),
             185 => self.load_a_absolute_y(),
+            186 => self.transfer_stack_pointer_to_x(),
             188 => self.load_y_absolute_x(),
             189 => self.load_a_absolute_x(),
             190 => self.load_x_absolute_y(),
@@ -894,6 +895,13 @@ impl Cpu {
     fn transfer_x_to_stack_pointer(&mut self) {
         self.wait_counter = 2;
         self.stack_pointer = self.x;
+    }
+
+    fn transfer_stack_pointer_to_x(&mut self) {
+        self.wait_counter = 2;
+        self.x = self.stack_pointer;
+        let value = self.x;
+        self.set_zero_negative_flags(value);
     }
 
     fn transfer_x_to_accumulator(&mut self) {
@@ -4213,6 +4221,62 @@ mod tests {
     fn transfer_x_to_stack_pointer_sets_wait_counter_correct() {
         let mut cpu = create_test_cpu();
         cpu.transfer_x_to_stack_pointer();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn transfer_stack_pointer_to_x_sets_x_to_correct_value() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x2F;
+        cpu.x = 0x4B;
+        cpu.transfer_stack_pointer_to_x();
+        assert_eq!(0x2F, cpu.x);
+    }
+
+    #[test]
+    fn transfer_x_to_stack_pointer_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x00;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_stack_pointer_to_x();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_stack_pointer_to_x_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x05;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x02;
+        cpu.transfer_stack_pointer_to_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_stack_pointer_to_x_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0xF0;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_stack_pointer_to_x();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_stack_pointer_to_x_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.stack_pointer = 0x05;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x80;
+        cpu.transfer_stack_pointer_to_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_stack_pointer_to_x_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.transfer_stack_pointer_to_x();
         assert_eq!(2, cpu.wait_counter);
     }
 
