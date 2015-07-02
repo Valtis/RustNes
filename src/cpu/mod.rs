@@ -513,13 +513,9 @@ impl Cpu {
     }
 
     fn do_logical_shift_right(&mut self, operand: u8) -> u8 {
-        let result = self.do_rotate_right(operand);
-
-        // clear negative flag in case it was set
-        self.status_flags = self.status_flags & 0x7F;
-
-        // mask bit 7 as this needs to be zero
-        result & 0x7F
+        let result = self.do_rotate_right(operand)  & 0x7F;
+        self.set_zero_negative_flags(result);
+        result
     }
 
     fn do_rotate_left(&mut self, operand: u8) -> u8 {
@@ -3149,6 +3145,14 @@ mod tests {
     fn do_right_bitshift_sets_zero_flag_if_result_is_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
+        cpu.do_logical_shift_right(0x01);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn do_right_bitshift_sets_zero_flag_if_result_is_zero_and_carry_flag_was_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
         cpu.do_logical_shift_right(0x01);
         assert_eq!(0x02, cpu.status_flags & 0x02);
     }
