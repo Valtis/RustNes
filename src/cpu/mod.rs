@@ -95,6 +95,7 @@ impl Cpu {
             132 => self.store_y_zero_page(),
             133 => self.store_a_zero_page(),
             134 => self.store_x_zero_page(),
+            136 => self.decrease_y(),
             138 => self.transfer_x_to_accumulator(),
             140 => self.store_y_absolute(),
             141 => self.store_a_absolute(),
@@ -136,6 +137,7 @@ impl Cpu {
             197 => self.compare_zero_page(),
             200 => self.increase_y(),
             201 => self.compare_immediate(),
+            202 => self.decrease_x(),
             204 => self.compare_y_absolute(),
             205 => self.compare_absolute(),
             208 => self.branch_if_not_equal(),
@@ -1091,14 +1093,28 @@ impl Cpu {
         self.wait_counter = 2;
         let value = (self.x as u16) + 1;
         self.x = (value & 0xFF) as u8;
-        self.set_zero_negative_flags((value & 0xFF) as u8)
+        self.set_zero_negative_flags((value & 0xFF) as u8);
+    }
+
+    fn decrease_x(&mut self) {
+        self.wait_counter = 2;
+        let value = (self.x as i16) - 1;
+        self.x = (value & 0xFF) as u8;
+        self.set_zero_negative_flags((value & 0xFF) as u8);
     }
 
     fn increase_y(&mut self) {
         self.wait_counter = 2;
         let value = (self.y as u16) + 1;
         self.y = (value & 0xFF) as u8;
-        self.set_zero_negative_flags((value & 0xFF) as u8)
+        self.set_zero_negative_flags((value & 0xFF) as u8);
+    }
+
+    fn decrease_y(&mut self) {
+        self.wait_counter = 2;
+        let value = (self.y as i16) - 1;
+        self.y = (value & 0xFF) as u8;
+        self.set_zero_negative_flags((value & 0xFF) as u8);
     }
 
     fn no_operation(&mut self) {
@@ -5382,6 +5398,65 @@ mod tests {
     }
 
     #[test]
+    fn decrease_x_decreases_x_by_one() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 21;
+        cpu.decrease_x();
+        assert_eq!(20, cpu.x);
+    }
+
+    #[test]
+    fn decrease_x_handles_overflow() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0;
+        cpu.decrease_x();
+        assert_eq!(255, cpu.x);
+    }
+
+    #[test]
+    fn decrease_x_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 255;
+        cpu.status_flags = 0x00;
+        cpu.decrease_x();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_x_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 80;
+        cpu.status_flags = 0x80;
+        cpu.decrease_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_x_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 1;
+        cpu.status_flags = 0x00;
+        cpu.decrease_x();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_x_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 80;
+        cpu.status_flags = 0x02;
+        cpu.decrease_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_x_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.decrease_x();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
     fn increase_y_increases_value_by_one() {
         let mut cpu = create_test_cpu();
 
@@ -5398,7 +5473,6 @@ mod tests {
         cpu.increase_y();
         assert_eq!(0, cpu.y);
     }
-
 
     #[test]
     fn increase_y_sets_negative_flag_if_result_is_negative() {
@@ -5444,6 +5518,65 @@ mod tests {
     fn increase_y_takes_2_cycles() {
         let mut cpu = create_test_cpu();
         cpu.increase_y();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn decrease_y_decreases_y_by_one() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 21;
+        cpu.decrease_y();
+        assert_eq!(20, cpu.y);
+    }
+
+    #[test]
+    fn decrease_y_handles_overflow() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0;
+        cpu.decrease_y();
+        assert_eq!(255, cpu.y);
+    }
+
+    #[test]
+    fn decrease_y_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 255;
+        cpu.status_flags = 0x00;
+        cpu.decrease_y();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_y_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 80;
+        cpu.status_flags = 0x80;
+        cpu.decrease_y();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_y_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 1;
+        cpu.status_flags = 0x00;
+        cpu.decrease_y();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_y_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 80;
+        cpu.status_flags = 0x02;
+        cpu.decrease_y();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn decrease_y_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.decrease_y();
         assert_eq!(2, cpu.wait_counter);
     }
 
