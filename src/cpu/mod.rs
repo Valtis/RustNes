@@ -530,7 +530,9 @@ impl Cpu {
     }
 
     fn do_arithmetic_shift_left(&mut self, operand: u8) -> u8 {
-        self.do_rotate_left(operand) & 0xFE
+        let result = self.do_rotate_left(operand) & 0xFE;
+        self.set_zero_negative_flags(result);
+        result
     }
 
     fn do_increase(&mut self, value: u8) -> u8 {
@@ -3336,6 +3338,15 @@ mod tests {
         cpu.do_arithmetic_shift_left(0x80);
         assert_eq!(0x02, cpu.status_flags & 0x02);
     }
+
+    #[test]
+    fn do_arithmetic_shift_left_sets_zero_flag_if_result_is_zero_and_carry_is_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.do_arithmetic_shift_left(0x80);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
 
     #[test]
     fn do_arithmetic_shift_left_clears_zero_flag_if_result_is_non_zero() {
