@@ -58,16 +58,21 @@ impl Cpu {
             33 => self.and_indirect_x(),
             36 => self.bit_test_zero_page(),
             37 => self.and_zero_page(),
+            38 => self.rotate_left_zero_page(),
             40 => self.pull_status_flags_from_stack(),
             41 => self.and_immediate(),
+            42 => self.rotate_left_accumulator(),
             44 => self.bit_test_absolute(),
             45 => self.and_absolute(),
+            46 => self.rotate_left_absolute(),
             48 => self.branch_if_negative(),
             49 => self.and_indirect_y(),
             53 => self.and_zero_page_x(),
+            54 => self.rotate_left_zero_page_x(),
             56 => self.set_carry_flag(),
             57 => self.and_absolute_y(),
             61 => self.and_absolute_x(),
+            62 => self.rotate_left_absolute_x(),
             64 => self.return_from_interrupt(),
             65 => self.exclusive_or_indirect_x(),
             69 => self.exclusive_or_zero_page(),
@@ -512,6 +517,14 @@ impl Cpu {
         result & 0x7F
     }
 
+    fn do_rotate_left(&mut self, operand: u8) -> u8 {
+        let result = operand << 1 | self.status_flags & 0x01;
+        self.set_zero_negative_flags(result);
+        self.status_flags = (self.status_flags & 0xFE) | ((operand & 0x80) >> 7);
+        result
+    }
+
+
     fn and_immediate(&mut self) {
         let operand = self.read_immediate();
         self.do_and(operand);
@@ -795,6 +808,48 @@ impl Cpu {
         let result = self.do_logical_shift_right(value);
         // decrement PC so that store works
         self.program_counter -= 2;
+        self.do_absolute_x_store(result);
+        self.wait_counter = 7;
+    }
+
+    fn rotate_left_accumulator(&mut self) {
+        self.wait_counter = 2;
+        let value = self.a;
+        self.a = self.do_rotate_left(value);
+    }
+
+    fn rotate_left_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        // move program counter back so that store works
+        self.program_counter -= 1;
+        let result = self.do_rotate_left(value);
+        self.do_zero_page_store(result);
+        self.wait_counter = 5;
+    }
+
+    fn rotate_left_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        // move program counter back so that store works
+        self.program_counter -= 1;
+        let result = self.do_rotate_left(value);
+        self.do_zero_page_x_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn rotate_left_absolute(&mut self) {
+        let value = self.read_absolute();
+        // move program counter back so that store works
+        self.program_counter -= 2;
+        let result = self.do_rotate_left(value);
+        self.do_absolute_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn rotate_left_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        // move program counter back so that store works
+        self.program_counter -= 2;
+        let result = self.do_rotate_left(value);
         self.do_absolute_x_store(result);
         self.wait_counter = 7;
     }
@@ -3018,6 +3073,13 @@ mod tests {
     }
 
     #[test]
+    fn do_right_bitshift_sets_bit_7_0_even_if_carry_is_1() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        assert_eq!(0x00, cpu.do_logical_shift_right(0x00));
+    }
+
+    #[test]
     fn do_right_bitshift_sets_carry_to_1_if_old_bit_0_was_1() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
@@ -3065,6 +3127,66 @@ mod tests {
         assert_eq!(0x00, cpu.status_flags);
     }
 
+    #[test]
+    fn rotate_left_moves_bits_left() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0xE6, cpu.do_rotate_left(0x73));
+    }
+
+    #[test]
+    fn rotate_left_sets_bit_0_to_carry() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        assert_eq!(0xE7, cpu.do_rotate_left(0x73));
+    }
+
+    #[test]
+    fn rotate_left_clears_carry_if_bit_7_is_0_before_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.do_rotate_left(0x73);
+        assert_eq!(0x00, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn rotate_left_sets_carry_if_bit_7_is_1_before_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_rotate_left(0xF3);
+        assert_eq!(0x01, cpu.status_flags & 0x01);
+    }
+
+    #[test]
+    fn rotate_left_sets_negative_flag_if_bit_7_is_set_after_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_rotate_left(0x73);
+        assert_eq!(0x80, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn rotate_left_clears_negative_flag_if_bit_7_is_not_set_after_shift() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x80;
+        cpu.do_rotate_left(0x13);
+        assert_eq!(0x00, cpu.status_flags & 0x80);
+    }
+
+    #[test]
+    fn rotate_left_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_rotate_left(0x80);
+        assert_eq!(0x02, cpu.status_flags & 0x02);
+    }
+
+    #[test]
+    fn rotate_left_clears_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x02;
+        cpu.do_rotate_left(0x32);
+        assert_eq!(0x00, cpu.status_flags);
+    }
 
     #[test]
     fn and_immediate_sets_accumulator_value_to_the_result() {
@@ -3905,22 +4027,6 @@ mod tests {
         assert_eq!(7, cpu.wait_counter);
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     #[test]
     fn logical_right_shift_accumulator_stores_correct_value_in_accumulator() {
         let mut cpu = create_test_cpu();
@@ -4021,7 +4127,6 @@ mod tests {
         assert_eq!(6, cpu.wait_counter);
     }
 
-
     #[test]
     fn logical_right_shift_absolute_x_modifies_memory() {
         let mut cpu = create_test_cpu();
@@ -4046,6 +4151,142 @@ mod tests {
     fn logical_right_absolute_x_takes_7_cycles() {
         let mut cpu = create_test_cpu();
         cpu.logical_shift_right_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn rotate_left_accumulator_stores_correct_value_in_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.a = 0x35;
+        cpu.rotate_left_accumulator();
+        assert_eq!(0x6B, cpu.a);
+    }
+
+    #[test]
+    fn rotate_left_accumulator_does_not_modify_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.rotate_left_accumulator();
+        assert_eq!(0x643, cpu.program_counter);
+    }
+
+    #[test]
+    fn rotate_left_accumulator_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.rotate_left_accumulator();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn rotate_left_zero_page_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xFE);
+        cpu.memory.borrow_mut().write(0xFE, 0x35);
+
+        cpu.rotate_left_zero_page();
+        assert_eq!(0x6B, cpu.memory.borrow_mut().read(0xFE));
+    }
+
+    #[test]
+    fn rotate_left_zero_page_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.rotate_left_zero_page();
+        assert_eq!(0x644, cpu.program_counter);
+    }
+
+    #[test]
+    fn rotate_left_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.rotate_left_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
+
+    #[test]
+    fn rotate_left_zero_page_x_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xAE);
+        cpu.memory.borrow_mut().write(0xAE + 0x13, 0x35);
+
+        cpu.rotate_left_zero_page_x();
+        assert_eq!(0x6B, cpu.memory.borrow_mut().read(0xAE + 0x13));
+    }
+
+    #[test]
+    fn rotate_left_zero_page_x_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.rotate_left_zero_page_x();
+        assert_eq!(0x644, cpu.program_counter);
+    }
+
+    #[test]
+    fn rotate_left_zero_page_x_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.rotate_left_zero_page_x();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn rotate_left_absolute_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xAE);
+        cpu.memory.borrow_mut().write(0x235, 0xF1);
+        cpu.memory.borrow_mut().write(0xF1AE, 0x35);
+
+        cpu.rotate_left_absolute();
+        assert_eq!(0x6B, cpu.memory.borrow_mut().read(0xF1AE));
+    }
+
+    #[test]
+    fn rotate_left_absolute_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.rotate_left_absolute();
+        assert_eq!(0x645, cpu.program_counter);
+    }
+
+    #[test]
+    fn rotate_left_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.rotate_left_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn rotate_left_absolute_x_stores_correct_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x01;
+        cpu.x = 0x20;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0xAE);
+        cpu.memory.borrow_mut().write(0x235, 0xF1);
+        cpu.memory.borrow_mut().write(0xF1AE + 0x20, 0x35);
+
+        cpu.rotate_left_absolute_x();
+        assert_eq!(0x6B, cpu.memory.borrow_mut().read(0xF1AE + 0x20));
+    }
+
+    #[test]
+    fn rotate_left_absolute_x_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x643;
+        cpu.rotate_left_absolute_x();
+        assert_eq!(0x645, cpu.program_counter);
+    }
+
+    #[test]
+    fn rotate_left_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.rotate_left_absolute_x();
         assert_eq!(7, cpu.wait_counter);
     }
 
