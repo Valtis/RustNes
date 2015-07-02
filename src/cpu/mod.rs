@@ -92,12 +92,16 @@ impl Cpu {
             121 => self.add_absolute_y(),
             125 => self.add_absolute_x(),
             129 => self.store_a_indirect_x(),
+            132 => self.store_y_zero_page(),
             133 => self.store_a_zero_page(),
             134 => self.store_x_zero_page(),
+            138 => self.transfer_x_to_accumulator(),
+            140 => self.store_y_absolute(),
             141 => self.store_a_absolute(),
             142 => self.store_x_absolute(),
             144 => self.branch_if_carry_clear(),
             145 => self.store_a_indirect_y(),
+            148 => self.store_y_zero_page_x(),
             149 => self.store_a_zero_page_x(),
             150 => self.store_x_zero_page_y(),
             152 => self.transfer_y_to_accumulator(),
@@ -110,7 +114,9 @@ impl Cpu {
             164 => self.load_y_zero_page(),
             165 => self.load_a_zero_page(),
             166 => self.load_x_zero_page(),
+            168 => self.transfer_accumulator_to_y(),
             169 => self.load_a_immediate(),
+            170 => self.transfer_accumulator_to_x(),
             172 => self.load_y_absolute(),
             173 => self.load_a_absolute(),
             174 => self.load_x_absolute(),
@@ -868,15 +874,51 @@ impl Cpu {
         self.load_y(value);
     }
 
+    fn store_y_zero_page(&mut self) {
+        let value = self.y;
+        self.do_zero_page_store(value);
+    }
+
+    fn store_y_zero_page_x(&mut self) {
+        let value = self.y;
+        self.do_zero_page_x_store(value);
+    }
+
+    fn store_y_absolute(&mut self) {
+        let value = self.y;
+        self.do_absolute_store(value);
+    }
+
     fn transfer_x_to_stack_pointer(&mut self) {
         self.wait_counter = 2;
         self.stack_pointer = self.x;
+    }
+
+    fn transfer_x_to_accumulator(&mut self) {
+        self.wait_counter = 2;
+        self.a = self.x;
+        let value = self.a;
+        self.set_zero_negative_flags(value);
+    }
+
+    fn transfer_accumulator_to_x(&mut self) {
+        self.wait_counter = 2;
+        self.x = self.a;
+        let value = self.x;
+        self.set_zero_negative_flags(value);
     }
 
     fn transfer_y_to_accumulator(&mut self) {
         self.wait_counter = 2;
         self.a = self.y;
         let value = self.a;
+        self.set_zero_negative_flags(value);
+    }
+
+    fn transfer_accumulator_to_y(&mut self) {
+        self.wait_counter = 2;
+        self.y = self.a;
+        let value = self.y;
         self.set_zero_negative_flags(value);
     }
 
@@ -4097,8 +4139,42 @@ mod tests {
 
         cpu.load_y_absolute_x();
         assert_eq!(0x2F, cpu.y);
-
     }
+
+
+    #[test]
+    fn store_y_zero_page_stores_value_into_memory_correctly() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x2f;
+        cpu.program_counter = 0x32;
+        cpu.memory.borrow_mut().write(0x32, 0x14);
+        cpu.store_y_zero_page();
+        assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x14));
+    }
+
+    #[test]
+    fn store_y_zero_page_x_stores_value_into_memory_correctly() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x2f;
+        cpu.x = 0x53;
+        cpu.program_counter = 0x32;
+        cpu.memory.borrow_mut().write(0x32, 0x14);
+        cpu.store_y_zero_page_x();
+        assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x14 + 0x53));
+    }
+
+    #[test]
+    fn store_y_absolute_stores_value_into_memory_correctly() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x2f;
+        cpu.program_counter = 0x32;
+        cpu.memory.borrow_mut().write(0x32, 0x14);
+        cpu.memory.borrow_mut().write(0x33, 0x08);
+
+        cpu.store_y_absolute();
+        assert_eq!(0x2f, cpu.memory.borrow_mut().read(0x0814));
+    }
+
 
     #[test]
     fn transfer_x_to_stack_pointer_sets_stack_pointer_to_correct_value() {
@@ -4121,6 +4197,119 @@ mod tests {
     fn transfer_x_to_stack_pointer_sets_wait_counter_correct() {
         let mut cpu = create_test_cpu();
         cpu.transfer_x_to_stack_pointer();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn transfer_x_to_accumulator_sets_accumulator_value_to_correct_value() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x2F;
+        cpu.a = 0x01;
+        cpu.transfer_x_to_accumulator();
+        assert_eq!(0x2F, cpu.a);
+    }
+
+    #[test]
+    fn transfer_x_to_accumulator_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x00;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_x_to_accumulator();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_x_to_accumulator_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x05;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x02;
+        cpu.transfer_x_to_accumulator();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_x_to_accumulator_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0xF0;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_x_to_accumulator();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_x_to_accumulator_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x05;
+        cpu.a = 0x01;
+        cpu.status_flags = 0x80;
+        cpu.transfer_x_to_accumulator();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_x_to_accumulator_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+
+        cpu.transfer_x_to_accumulator();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_x_sets_x_value_to_correct_value() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x2F;
+        cpu.x = 0x01;
+        cpu.transfer_accumulator_to_x();
+        assert_eq!(0x2F, cpu.x);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_x_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x00;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_accumulator_to_x();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_x_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x05;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x02;
+        cpu.transfer_accumulator_to_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_x_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0xF0;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_accumulator_to_x();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_x_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x05;
+        cpu.x = 0x01;
+        cpu.status_flags = 0x80;
+        cpu.transfer_accumulator_to_x();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_x_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.transfer_accumulator_to_x();
         assert_eq!(2, cpu.wait_counter);
     }
 
@@ -4178,6 +4367,63 @@ mod tests {
         let mut cpu = create_test_cpu();
 
         cpu.transfer_y_to_accumulator();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_y_sets_y_value_to_correct_value() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x2F;
+        cpu.y = 0x01;
+        cpu.transfer_accumulator_to_y();
+        assert_eq!(0x2F, cpu.y);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_y_sets_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x00;
+        cpu.y = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_accumulator_to_y();
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_y_clears_zero_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x05;
+        cpu.y = 0x01;
+        cpu.status_flags = 0x02;
+        cpu.transfer_accumulator_to_y();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_y_sets_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0xF0;
+        cpu.y = 0x01;
+        cpu.status_flags = 0x00;
+        cpu.transfer_accumulator_to_y();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_y_clears_negative_flag() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x05;
+        cpu.y = 0x01;
+        cpu.status_flags = 0x80;
+        cpu.transfer_accumulator_to_y();
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn transfer_accumulator_to_y_takes_2_cycles() {
+        let mut cpu = create_test_cpu();
+
+        cpu.transfer_accumulator_to_y();
         assert_eq!(2, cpu.wait_counter);
     }
 
