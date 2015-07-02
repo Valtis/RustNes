@@ -41,22 +41,28 @@ impl Cpu {
     pub fn execute_instruction(&mut self) {
 
         let instruction = self.memory.borrow_mut().read(self.program_counter);
+
         self.program_counter += 1;
         match instruction {
             1 => self.inclusive_or_indirect_x(),
+            4 => self.unofficial_double_no_operation(3),
             5 => self.inclusive_or_zero_page(),
             6 => self.arithmetic_shift_left_zero_page(),
             8 => self.push_status_flags_into_stack(),
             9 => self.inclusive_or_immediate(),
             10 => self.arithmetic_shift_left_accumulator(),
+            12 => self.unofficial_triple_no_operation_no_page_penalty(4),
             13 => self.inclusive_or_absolute(),
             14 => self.arithmetic_shift_left_absolute(),
             16 => self.branch_if_positive(),
             17 => self.inclusive_or_indirect_y(),
+            20 => self.unofficial_double_no_operation(4),
             21 => self.inclusive_or_zero_page_x(),
             22 => self.arithmetic_shift_left_zero_page_x(),
             24 => self.clear_carry_flag(),
             25 => self.inclusive_or_absolute_y(),
+            26 => self.unofficial_nop(),
+            28 => self.unofficial_triple_no_operation_page_penalty(4),
             29 => self.inclusive_or_absolute_x(),
             30 => self.arithmetic_shift_left_absolute_x(),
             32 => self.jump_to_subroutine(),
@@ -72,14 +78,18 @@ impl Cpu {
             46 => self.rotate_left_absolute(),
             48 => self.branch_if_negative(),
             49 => self.and_indirect_y(),
+            52 => self.unofficial_double_no_operation(4),
             53 => self.and_zero_page_x(),
             54 => self.rotate_left_zero_page_x(),
             56 => self.set_carry_flag(),
             57 => self.and_absolute_y(),
+            58 => self.unofficial_nop(),
+            60 => self.unofficial_triple_no_operation_page_penalty(4),
             61 => self.and_absolute_x(),
             62 => self.rotate_left_absolute_x(),
             64 => self.return_from_interrupt(),
             65 => self.exclusive_or_indirect_x(),
+            68 => self.unofficial_double_no_operation(3),
             69 => self.exclusive_or_zero_page(),
             70 => self.logical_shift_right_zero_page(),
             72 => self.push_accumulator(),
@@ -90,13 +100,17 @@ impl Cpu {
             78 => self.logical_shift_right_absolute(),
             80 => self.branch_if_overflow_clear(),
             81 => self.exclusive_or_indirect_y(),
+            84 => self.unofficial_double_no_operation(4),
             85 => self.exclusive_or_zero_page_x(),
             86 => self.logical_shift_right_zero_page_x(),
             89 => self.exclusive_or_absolute_y(),
+            90 => self.unofficial_nop(),
+            92 => self.unofficial_triple_no_operation_page_penalty(4),
             93 => self.exclusive_or_absolute_x(),
             94 => self.logical_shift_right_absolute_x(),
             96 => self.return_from_subroutine(),
             97 => self.add_indirect_x(),
+            100 => self.unofficial_double_no_operation(3),
             101 => self.add_zero_page(),
             102 => self.rotate_right_zero_page(),
             104 => self.pull_accumulator(),
@@ -107,17 +121,23 @@ impl Cpu {
             110 => self.rotate_right_absolute(),
             112 => self.branch_if_overflow_set(),
             113 => self.add_indirect_y(),
+            116 => self.unofficial_double_no_operation(4),
             117 => self.add_zero_page_x(),
             118 => self.rotate_right_zero_page_x(),
             120 => self.set_interrupt_disable_flag(),
             121 => self.add_absolute_y(),
+            122 => self.unofficial_nop(),
+            124 => self.unofficial_triple_no_operation_page_penalty(4),
             125 => self.add_absolute_x(),
             126 => self.rotate_right_absolute_x(),
+            128 => self.unofficial_double_no_operation(2),
             129 => self.store_a_indirect_x(),
+            130 => self.unofficial_double_no_operation(2),
             132 => self.store_y_zero_page(),
             133 => self.store_a_zero_page(),
             134 => self.store_x_zero_page(),
             136 => self.decrease_y(),
+            137 => self.unofficial_double_no_operation(2),
             138 => self.transfer_x_to_accumulator(),
             140 => self.store_y_absolute(),
             141 => self.store_a_absolute(),
@@ -156,6 +176,7 @@ impl Cpu {
             190 => self.load_x_absolute_y(),
             192 => self.compare_y_immediate(),
             193 => self.compare_indirect_x(),
+            194 => self.unofficial_double_no_operation(2),
             196 => self.compare_y_zero_page(),
             197 => self.compare_zero_page(),
             198 => self.decrease_memory_zero_page(),
@@ -167,14 +188,18 @@ impl Cpu {
             206 => self.decrease_memory_absolute(),
             208 => self.branch_if_not_equal(),
             209 => self.compare_indirect_y(),
+            212 => self.unofficial_double_no_operation(4),
             213 => self.compare_zero_page_x(),
             214 => self.decrease_memory_zero_page_x(),
             216 => self.clear_decimal_flag(),
             217 => self.compare_absolute_y(),
+            218 => self.unofficial_nop(),
+            220 => self.unofficial_triple_no_operation_page_penalty(4),
             221 => self.compare_absolute_x(),
             222 => self.decrease_memory_absolute_x(),
             224 => self.compare_x_immediate(),
             225 => self.subtract_indirect_x(),
+            226 => self.unofficial_double_no_operation(2),
             228 => self.compare_x_zero_page(),
             229 => self.subtract_zero_page(),
             230 => self.increase_memory_zero_page(),
@@ -186,10 +211,13 @@ impl Cpu {
             238 => self.increase_memory_absolute(),
             240 => self.branch_if_equal(),
             241 => self.subtract_indirect_y(),
+            244 => self.unofficial_double_no_operation(4),
             245 => self.subtract_zero_page_x(),
             246 => self.increase_memory_zero_page_x(),
             248 => self.set_decimal_flag(),
             249 => self.subtract_absolute_y(),
+            250 => self.unofficial_nop(),
+            252 => self.unofficial_triple_no_operation_page_penalty(4),
             253 => self.subtract_absolute_x(),
             254 => self.increase_memory_absolute_x(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
@@ -269,7 +297,7 @@ impl Cpu {
 
     fn read_absolute_with_offset(&mut self, offset: u16) -> u8 {
         let base = self.get_absolute_address();
-        let address = base + offset;
+        let address = ((base as u32 + offset as u32) & 0xFFFF) as u16;
         // if page boundary is crossed, instruction takes 5 cycles. Otherwise it takes 4 cycles
         if base & 0xFF00 == address & 0xFF00 {
             self.wait_counter = 4;
@@ -1449,6 +1477,34 @@ impl Cpu {
     fn no_operation(&mut self) {
         self.wait_counter = 2;
     }
+
+    // unofficial\illegal instructions may basically just do a read without
+    // doing anything else with the result
+
+    // for consistency
+    fn unofficial_nop(&mut self) {
+        self.no_operation();
+    }
+
+    fn unofficial_double_no_operation(&mut self, cycles: u8) {
+        self.wait_counter = cycles;
+        self.program_counter += 1;
+    }
+
+    fn unofficial_triple_no_operation_no_page_penalty(&mut self, cycles: u8) {
+        self.wait_counter = cycles;
+        self.program_counter += 2;
+    }
+    // add a cycle if page boundary is crossed
+    fn unofficial_triple_no_operation_page_penalty(&mut self, cycles: u8) {
+        let first = self.program_counter;
+        let second = self.program_counter + 1;
+        self.program_counter += 2;
+        self.wait_counter = cycles;
+        if first & 0xFF00 != second & 0xFF00 {
+            self.wait_counter += 1;
+        }
+    }
 }
 #[derive(Debug)]
 pub struct Frequency {
@@ -1811,6 +1867,16 @@ mod tests {
         cpu.memory.borrow_mut().write(0x433, 0xE0);
         cpu.memory.borrow_mut().write(0xE100, 0xC5);
         assert_eq!(0xC5, cpu.read_absolute_with_offset(0x01));
+    }
+
+    #[test]
+    fn read_absolute_with_offset_handles_wrapping() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x432;
+        cpu.memory.borrow_mut().write(0x432, 0xFF);
+        cpu.memory.borrow_mut().write(0x433, 0xFF);
+        cpu.memory.borrow_mut().write(0x0033, 0xC5);
+        assert_eq!(0xC5, cpu.read_absolute_with_offset(0x34));
     }
 
     #[test]
@@ -6962,14 +7028,51 @@ mod tests {
         assert_eq!(7, cpu.wait_counter);
     }
 
-
-
-
-
     #[test]
     fn no_operation_waits_2_cycles() {
         let mut cpu = create_test_cpu();
         cpu.no_operation();
         assert_eq!(2, cpu.wait_counter);
     }
+
+    #[test]
+    fn unofficial_double_no_operation_increments_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x13;
+        cpu.unofficial_double_no_operation(2);
+        assert_eq!(0x14, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_triple_no_operation_page_penalty_does_not_add_a_cycle_when_page_boundary_is_not_crossed() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x0023;
+        cpu.unofficial_triple_no_operation_page_penalty(2);
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_triple_no_operation_page_penalty_adds_a_cycle_when_page_boundary_is_crossed() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x00FF;
+        cpu.unofficial_triple_no_operation_page_penalty(2);
+        assert_eq!(3, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_triple_no_operation_no_page_penalty_increments_pc_twice() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x13;
+        cpu.unofficial_triple_no_operation_no_page_penalty(3);
+        assert_eq!(0x15, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_triple_no_operation_page_penalty_increments_pc_twice() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x13;
+        cpu.unofficial_triple_no_operation_page_penalty(3);
+        assert_eq!(0x15, cpu.program_counter);
+    }
+
 }
