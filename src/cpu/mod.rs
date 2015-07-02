@@ -172,17 +172,21 @@ impl Cpu {
             225 => self.subtract_indirect_x(),
             228 => self.compare_x_zero_page(),
             229 => self.subtract_zero_page(),
+            230 => self.increase_memory_zero_page(),
             232 => self.increase_x(),
             233 => self.subtract_immediate(),
             234 => self.no_operation(),
             236 => self.compare_x_absolute(),
             237 => self.subtract_absolute(),
+            238 => self.increase_memory_absolute(),
             240 => self.branch_if_equal(),
             241 => self.subtract_indirect_y(),
             245 => self.subtract_zero_page_x(),
+            246 => self.increase_memory_zero_page_x(),
             248 => self.set_decimal_flag(),
             249 => self.subtract_absolute_y(),
             253 => self.subtract_absolute_x(),
+            254 => self.increase_memory_absolute_x(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.program_counter - 1, self),
         }
@@ -527,6 +531,12 @@ impl Cpu {
 
     fn do_arithmetic_shift_left(&mut self, operand: u8) -> u8 {
         self.do_rotate_left(operand) & 0xFE
+    }
+
+    fn do_increase(&mut self, value: u8) -> u8 {
+        let result = (value as u16) + 1;
+        self.set_zero_negative_flags((result & 0xFF) as u8);
+        (result & 0xFF) as u8
     }
 
     fn and_immediate(&mut self) {
@@ -1318,10 +1328,10 @@ impl Cpu {
 
     fn increase_x(&mut self) {
         self.wait_counter = 2;
-        let value = (self.x as u16) + 1;
-        self.x = (value & 0xFF) as u8;
-        self.set_zero_negative_flags((value & 0xFF) as u8);
+        let value = self.x;
+        self.x = self.do_increase(value);
     }
+
 
     fn decrease_x(&mut self) {
         self.wait_counter = 2;
@@ -1332,9 +1342,8 @@ impl Cpu {
 
     fn increase_y(&mut self) {
         self.wait_counter = 2;
-        let value = (self.y as u16) + 1;
-        self.y = (value & 0xFF) as u8;
-        self.set_zero_negative_flags((value & 0xFF) as u8);
+        let value = self.y;
+        self.y = self.do_increase(value);
     }
 
     fn decrease_y(&mut self) {
@@ -1342,6 +1351,39 @@ impl Cpu {
         let value = (self.y as i16) - 1;
         self.y = (value & 0xFF) as u8;
         self.set_zero_negative_flags((value & 0xFF) as u8);
+    }
+
+
+    fn increase_memory_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        let result = self.do_increase(value);
+        self.program_counter -= 1; // need the zero page address again
+        self.do_zero_page_store(result);
+        self.wait_counter = 5;
+    }
+
+    fn increase_memory_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        let result = self.do_increase(value);
+        self.program_counter -= 1; // need the zero page address again
+        self.do_zero_page_x_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn increase_memory_absolute(&mut self) {
+        let value = self.read_absolute();
+        let result = self.do_increase(value);
+        self.program_counter -= 2; // need the zero page address again
+        self.do_absolute_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn increase_memory_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        let result = self.do_increase(value);
+        self.program_counter -= 2; // need the zero page address again
+        self.do_absolute_x_store(result);
+        self.wait_counter = 7;
     }
 
     fn no_operation(&mut self) {
@@ -3182,20 +3224,20 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_moves_bits_left() {
+    fn do_rotate_left_moves_bits_left() {
         let mut cpu = create_test_cpu();
         assert_eq!(0xE6, cpu.do_rotate_left(0x73));
     }
 
     #[test]
-    fn rotate_left_sets_bit_0_to_1_if_carry_is_set() {
+    fn do_rotate_left_sets_bit_0_to_1_if_carry_is_set() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x01;
         assert_eq!(0xE7, cpu.do_rotate_left(0x73));
     }
 
     #[test]
-    fn rotate_left_clears_carry_if_bit_7_is_0_before_shift() {
+    fn do_rotate_left_clears_carry_if_bit_7_is_0_before_shift() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x01;
         cpu.do_rotate_left(0x73);
@@ -3203,7 +3245,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_sets_carry_if_bit_7_is_1_before_shift() {
+    fn do_rotate_left_sets_carry_if_bit_7_is_1_before_shift() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.do_rotate_left(0xF3);
@@ -3211,7 +3253,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_sets_negative_flag_if_bit_7_is_set_after_shift() {
+    fn do_rotate_left_sets_negative_flag_if_bit_7_is_set_after_shift() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.do_rotate_left(0x73);
@@ -3219,7 +3261,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_clears_negative_flag_if_bit_7_is_not_set_after_shift() {
+    fn do_rotate_left_clears_negative_flag_if_bit_7_is_not_set_after_shift() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
         cpu.do_rotate_left(0x13);
@@ -3227,7 +3269,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_sets_zero_flag_if_result_is_zero() {
+    fn do_rotate_left_sets_zero_flag_if_result_is_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
         cpu.do_rotate_left(0x80);
@@ -3235,7 +3277,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_left_clears_zero_flag_if_result_is_non_zero() {
+    fn do_rotate_left_clears_zero_flag_if_result_is_non_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.do_rotate_left(0x32);
@@ -3300,6 +3342,54 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
         cpu.do_arithmetic_shift_left(0x32);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+
+    #[test]
+    fn do_increase_increases_value_by_one() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(21, cpu.do_increase(20));
+    }
+
+    #[test]
+    fn do_increase_handles_overflow() {
+        let mut cpu = create_test_cpu();
+        assert_eq!(0, cpu.do_increase(255));
+    }
+
+
+    #[test]
+    fn do_increase_negative_flag_if_result_is_negative() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x00;
+        cpu.do_increase(0x7F);
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_increase_clears_negative_flag_if_result_is_positive() {
+        let mut cpu = create_test_cpu();
+
+        cpu.status_flags = 0x80;
+        cpu.do_increase(0x5);
+        assert_eq!(0x00, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_increase_sets_zero_flag_if_result_is_zero() {
+        let mut cpu = create_test_cpu();
+
+        cpu.status_flags = 0x00;
+        cpu.do_increase(0xFF);
+        assert_eq!(0x02, cpu.status_flags);
+    }
+
+    #[test]
+    fn do_increase_clears_zero_flag_if_result_is_non_zero() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0x02;
+        cpu.do_increase(0x05);
         assert_eq!(0x00, cpu.status_flags);
     }
 
@@ -6478,56 +6568,6 @@ mod tests {
     }
 
     #[test]
-    fn increase_x_handles_overflow() {
-        let mut cpu = create_test_cpu();
-
-        cpu.x = 255;
-        cpu.increase_x();
-        assert_eq!(0, cpu.x);
-    }
-
-
-    #[test]
-    fn increase_x_sets_negative_flag_if_result_is_negative() {
-        let mut cpu = create_test_cpu();
-
-        cpu.x = 0x7F;
-        cpu.status_flags = 0x00;
-        cpu.increase_x();
-        assert_eq!(0x80, cpu.status_flags);
-    }
-
-    #[test]
-    fn increase_x_clears_negative_flag_if_result_is_positive() {
-        let mut cpu = create_test_cpu();
-
-        cpu.x = 0x5;
-        cpu.status_flags = 0x80;
-        cpu.increase_x();
-        assert_eq!(0x00, cpu.status_flags);
-    }
-
-    #[test]
-    fn increase_x_sets_zero_flag_if_result_is_zero() {
-        let mut cpu = create_test_cpu();
-
-        cpu.x = 0xFF;
-        cpu.status_flags = 0x00;
-        cpu.increase_x();
-        assert_eq!(0x02, cpu.status_flags);
-    }
-
-    #[test]
-    fn increase_x_clears_zero_flag_if_result_is_non_zero() {
-        let mut cpu = create_test_cpu();
-
-        cpu.x = 0x05;
-        cpu.status_flags = 0x02;
-        cpu.increase_x();
-        assert_eq!(0x00, cpu.status_flags);
-    }
-
-    #[test]
     fn increase_x_takes_2_cycles() {
         let mut cpu = create_test_cpu();
         cpu.increase_x();
@@ -6603,55 +6643,6 @@ mod tests {
     }
 
     #[test]
-    fn increase_y_handles_overflow() {
-        let mut cpu = create_test_cpu();
-
-        cpu.y = 255;
-        cpu.increase_y();
-        assert_eq!(0, cpu.y);
-    }
-
-    #[test]
-    fn increase_y_sets_negative_flag_if_result_is_negative() {
-        let mut cpu = create_test_cpu();
-
-        cpu.y = 0x7F;
-        cpu.status_flags = 0x00;
-        cpu.increase_y();
-        assert_eq!(0x80, cpu.status_flags);
-    }
-
-    #[test]
-    fn increase_y_clears_negative_flag_if_result_is_positive() {
-        let mut cpu = create_test_cpu();
-
-        cpu.y = 0x5;
-        cpu.status_flags = 0x80;
-        cpu.increase_y();
-        assert_eq!(0x00, cpu.status_flags);
-    }
-
-    #[test]
-    fn increase_y_sets_zero_flag_if_result_is_zero() {
-        let mut cpu = create_test_cpu();
-
-        cpu.y = 0xFF;
-        cpu.status_flags = 0x00;
-        cpu.increase_y();
-        assert_eq!(0x02, cpu.status_flags);
-    }
-
-    #[test]
-    fn increase_y_clears_zero_flag_if_result_is_non_zero() {
-        let mut cpu = create_test_cpu();
-
-        cpu.y = 0x05;
-        cpu.status_flags = 0x02;
-        cpu.increase_y();
-        assert_eq!(0x00, cpu.status_flags);
-    }
-
-    #[test]
     fn increase_y_takes_2_cycles() {
         let mut cpu = create_test_cpu();
         cpu.increase_y();
@@ -6715,6 +6706,112 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.decrease_y();
         assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
+    fn increase_memory_zero_page_increases_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x70);
+        cpu.memory.borrow_mut().write(0x70, 43);
+        cpu.increase_memory_zero_page();
+        assert_eq!(44, cpu.memory.borrow_mut().read(0x70));
+    }
+
+    #[test]
+    fn increase_memory_zero_page_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.increase_memory_zero_page();
+        assert_eq!(0xABD, cpu.program_counter);
+    }
+
+    #[test]
+    fn increase_memory_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.increase_memory_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
+
+    #[test]
+    fn increase_memory_zero_page_x_increases_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x24;
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x70);
+        cpu.memory.borrow_mut().write(0x70 + 0x24, 43);
+        cpu.increase_memory_zero_page_x();
+        assert_eq!(44, cpu.memory.borrow_mut().read(0x70 + 0x24));
+    }
+
+    #[test]
+    fn increase_memory_zero_page_x_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.increase_memory_zero_page_x();
+        assert_eq!(0xABD, cpu.program_counter);
+    }
+
+    #[test]
+    fn increase_memory_zero_page_x_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.increase_memory_zero_page_x();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn increase_memory_absolute_increases_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x70);
+        cpu.memory.borrow_mut().write(0xABD, 0x02);
+
+        cpu.memory.borrow_mut().write(0x0270, 43);
+        cpu.increase_memory_absolute();
+        assert_eq!(44, cpu.memory.borrow_mut().read(0x0270));
+    }
+
+    #[test]
+    fn increase_memory_absolute_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.increase_memory_absolute();
+        assert_eq!(0xABE, cpu.program_counter);
+    }
+
+    #[test]
+    fn increase_memory_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.increase_memory_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn increase_memory_absolute_x_increases_value_in_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.x = 0x53;
+        cpu.memory.borrow_mut().write(0xABC, 0x70);
+        cpu.memory.borrow_mut().write(0xABD, 0x02);
+
+        cpu.memory.borrow_mut().write(0x0270 + 0x53, 43);
+        cpu.increase_memory_absolute_x();
+        assert_eq!(44, cpu.memory.borrow_mut().read(0x0270 + 0x53));
+    }
+
+    #[test]
+    fn increase_memory_absolute_x_increments_program_counter() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xABC;
+        cpu.increase_memory_absolute_x();
+        assert_eq!(0xABE, cpu.program_counter);
+    }
+
+    #[test]
+    fn increase_memory_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.increase_memory_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
     }
 
     #[test]
