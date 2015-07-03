@@ -142,26 +142,33 @@ impl Cpu {
             95 => self.unofficial_shift_right_memory_xor_acc_absolute_x(),
             96 => self.return_from_subroutine(),
             97 => self.add_indirect_x(),
+            99 => self.unofficial_rotate_right_memory_add_acc_indirect_x(),
             100 => self.unofficial_double_no_operation(3),
             101 => self.add_zero_page(),
             102 => self.rotate_right_zero_page(),
+            103 => self.unofficial_rotate_right_memory_add_acc_zero_page(),
             104 => self.pull_accumulator(),
             105 => self.add_immediate(),
             106 => self.rotate_right_accumulator(),
             108 => self.jump_indirect(),
             109 => self.add_absolute(),
             110 => self.rotate_right_absolute(),
+            111 => self.unofficial_rotate_right_memory_add_acc_absolute(),
             112 => self.branch_if_overflow_set(),
             113 => self.add_indirect_y(),
+            115 => self.unofficial_rotate_right_memory_add_acc_indirect_y(),
             116 => self.unofficial_double_no_operation(4),
             117 => self.add_zero_page_x(),
             118 => self.rotate_right_zero_page_x(),
+            119 => self.unofficial_rotate_right_memory_add_acc_zero_page_x(),
             120 => self.set_interrupt_disable_flag(),
             121 => self.add_absolute_y(),
             122 => self.unofficial_nop(),
+            123 => self.unofficial_rotate_right_memory_add_acc_absolute_y(),
             124 => self.unofficial_triple_no_operation_page_penalty(4),
             125 => self.add_absolute_x(),
             126 => self.rotate_right_absolute_x(),
+            127 => self.unofficial_rotate_right_memory_add_acc_absolute_x(),
             128 => self.unofficial_double_no_operation(2),
             129 => self.store_a_indirect_x(),
             130 => self.unofficial_double_no_operation(2),
@@ -1936,6 +1943,71 @@ impl Cpu {
         self.do_indirect_y_store(result);
         self.wait_counter = 8;
     }
+
+    fn unofficial_rotate_right_memory_add_acc_zero_page(&mut self) {
+        let value = self.read_zero_page();
+        let result = self.do_rotate_right(value);
+
+        self.do_add(result);
+        self.program_counter -= 1;
+        self.do_zero_page_store(result);
+        self.wait_counter = 5;
+    }
+
+    fn unofficial_rotate_right_memory_add_acc_zero_page_x(&mut self) {
+        let value = self.read_zero_page_x();
+        let result = self.do_rotate_right(value);
+        self.do_add(result);
+        self.program_counter -= 1;
+        self.do_zero_page_x_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn unofficial_rotate_right_memory_add_acc_absolute(&mut self) {
+        let value = self.read_absolute();
+        let result = self.do_rotate_right(value);
+        self.do_add(result);
+        self.program_counter -= 2;
+        self.do_absolute_store(result);
+        self.wait_counter = 6;
+    }
+
+    fn unofficial_rotate_right_memory_add_acc_absolute_x(&mut self) {
+        let value = self.read_absolute_x();
+        let result = self.do_rotate_right(value);
+        self.do_add(result);
+        self.program_counter -= 2;
+        self.do_absolute_x_store(result);
+        self.wait_counter = 7;
+    }
+
+    fn unofficial_rotate_right_memory_add_acc_absolute_y(&mut self) {
+        let value = self.read_absolute_y();
+        let result = self.do_rotate_right(value);
+        self.do_add(result);
+        self.program_counter -= 2;
+        self.do_absolute_y_store(result);
+        self.wait_counter = 7;
+    }
+
+    fn unofficial_rotate_right_memory_add_acc_indirect_x(&mut self) {
+        let value = self.read_indirect_x();
+        let result = self.do_rotate_right(value);
+        self.do_add(result);
+        self.program_counter -= 1;
+        self.do_indirect_x_store(result);
+        self.wait_counter = 8;
+    }
+
+    fn unofficial_rotate_right_memory_add_acc_indirect_y(&mut self) {
+        let value = self.read_indirect_y();
+        let result = self.do_rotate_right(value);
+        self.do_add(result);
+        self.program_counter -= 1;
+        self.do_indirect_y_store(result);
+        self.wait_counter = 8;
+    }
+
 
     // unofficial\illegal instructions may basically just do a read without
     // doing anything else with the result
@@ -8881,250 +8953,466 @@ mod tests {
         assert_eq!(8, cpu.wait_counter);
     }
 
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_zero_page_changes_memory() {
+        let mut cpu = create_test_cpu();
 
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_zero_page();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F));
+    }
 
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_zero_page_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
 
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_zero_page();
+        assert_eq!(0x5F,  cpu.a);
+    }
 
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
 
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_zero_page_x_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_zero_page_x();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F + 0x13));
+    }
 
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_zero_page_x_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_zero_page_x();
+        assert_eq!(0x5F, cpu.a);
+    }
 
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_zero_page_x_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_absolute();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F));
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_absolute();
+        assert_eq!(0x5F, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_x_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_x_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
+        assert_eq!(0x5F, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_y_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_y_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.y = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
+        assert_eq!(0x5F, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_absolute_y_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
+        assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_indirect_x_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F + 0x13, 0x02);
+        cpu.memory.borrow_mut().write(0x20 + 0x13, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02, 0x5A);
+
+        cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02));
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_indirect_x_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F + 0x13, 0x02);
+        cpu.memory.borrow_mut().write(0x20 + 0x13, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02, 0x5A);
+
+        cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
+        assert_eq!(0x5F, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_indirect_x_takes_8_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
+        assert_eq!(8, cpu.wait_counter);
+    }
 
 
     #[test]
-fn unofficial_shift_right_memory_xor_acc_zero_page_changes_memory() {
-    let mut cpu = create_test_cpu();
+    fn unofficial_shift_right_memory_xor_acc_indirect_y_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x13;
+        cpu.program_counter = 0x234;
 
-    cpu.program_counter = 0x234;
-    cpu.memory.borrow_mut().write(0x234, 0x4F);
-    cpu.memory.borrow_mut().write(0x4F, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_zero_page();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x4F));
-}
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F, 0x02);
+        cpu.memory.borrow_mut().write(0x20, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_zero_page_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
+        cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02 + 0x13));
+    }
 
-    cpu.memory.borrow_mut().write(0x234, 0x4F);
-    cpu.memory.borrow_mut().write(0x4F, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_zero_page();
-    assert_eq!(0x5F,  cpu.a);
-}
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_indirect_y_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.y = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F, 0x02);
+        cpu.memory.borrow_mut().write(0x20, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_zero_page_takes_5_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_zero_page();
-    assert_eq!(5, cpu.wait_counter);
-}
+        cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
+        assert_eq!(0x5F, cpu.a);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_zero_page_x_changes_memory() {
-    let mut cpu = create_test_cpu();
-    cpu.x = 0x13;
-    cpu.program_counter = 0x234;
-    cpu.memory.borrow_mut().write(0x234, 0x4F);
-    cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_zero_page_x();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x4F + 0x13));
-}
+    #[test]
+    fn unofficial_shift_right_memory_xor_acc_indirect_y_takes_8_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
+        assert_eq!(8, cpu.wait_counter);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_zero_page_x_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
-    cpu.x = 0x13;
-    cpu.memory.borrow_mut().write(0x234, 0x4F);
-    cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_zero_page_x();
-    assert_eq!(0x5F, cpu.a);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_zero_page_changes_memory() {
+        let mut cpu = create_test_cpu();
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_zero_page_x_takes_6_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_absolute();
-    assert_eq!(6, cpu.wait_counter);
-}
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_zero_page();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F));
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_changes_memory() {
-    let mut cpu = create_test_cpu();
-    cpu.x = 0x13;
-    cpu.program_counter = 0x234;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x235, 0x43);
-    cpu.memory.borrow_mut().write(0x431F, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_absolute();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x431F));
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_zero_page_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
-    cpu.x = 0x13;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x235, 0x43);
-    cpu.memory.borrow_mut().write(0x431F, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_absolute();
-    assert_eq!(0x5F, cpu.a);
-}
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_zero_page();
+        assert_eq!(0x72 + 0x2D,  cpu.a);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_takes_6_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_absolute();
-    assert_eq!(6, cpu.wait_counter);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_x_changes_memory() {
-    let mut cpu = create_test_cpu();
-    cpu.x = 0x13;
-    cpu.program_counter = 0x234;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x235, 0x43);
-    cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_zero_page_x_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_zero_page_x();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F + 0x13));
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_x_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
-    cpu.x = 0x13;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x235, 0x43);
-    cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
-    assert_eq!(0x5F, cpu.a);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_zero_page_x_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_zero_page_x();
+        assert_eq!(0x72 + 0x2D, cpu.a);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_x_takes_7_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
-    assert_eq!(7, cpu.wait_counter);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_zero_page_x_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_y_changes_memory() {
-    let mut cpu = create_test_cpu();
-    cpu.y = 0x13;
-    cpu.program_counter = 0x234;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x235, 0x43);
-    cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_absolute();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F));
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_y_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
-    cpu.y = 0x13;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x235, 0x43);
-    cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
-    cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
-    assert_eq!(0x5F, cpu.a);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_absolute();
+        assert_eq!(0x72 + 0x2D, cpu.a);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_absolute_y_takes_7_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
-    assert_eq!(7, cpu.wait_counter);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_indirect_x_changes_memory() {
-    let mut cpu = create_test_cpu();
-    cpu.x = 0x13;
-    cpu.program_counter = 0x234;
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_x_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_absolute_x();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+    }
 
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x1F + 0x13, 0x02);
-    cpu.memory.borrow_mut().write(0x20 + 0x13, 0x0A);
-    cpu.memory.borrow_mut().write(0x0A02, 0x5A);
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_x_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_absolute_x();
+        assert_eq!(0x72 + 0x2D, cpu.a);
+    }
 
-    cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02));
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_indirect_x_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
-    cpu.x = 0x13;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x1F + 0x13, 0x02);
-    cpu.memory.borrow_mut().write(0x20 + 0x13, 0x0A);
-    cpu.memory.borrow_mut().write(0x0A02, 0x5A);
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_y_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x13;
+        cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_absolute_y();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+    }
 
-    cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
-    assert_eq!(0x5F, cpu.a);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_y_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.y = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x235, 0x43);
+        cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_absolute_y();
+        assert_eq!(0x72 + 0x2D, cpu.a);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_indirect_x_takes_8_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
-    assert_eq!(8, cpu.wait_counter);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_absolute_y_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_absolute_y();
+        assert_eq!(7, cpu.wait_counter);
+    }
 
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_indirect_x_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.x = 0x13;
+        cpu.program_counter = 0x234;
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_indirect_y_changes_memory() {
-    let mut cpu = create_test_cpu();
-    cpu.y = 0x13;
-    cpu.program_counter = 0x234;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F + 0x13, 0x02);
+        cpu.memory.borrow_mut().write(0x20 + 0x13, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02, 0x5A);
 
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x1F, 0x02);
-    cpu.memory.borrow_mut().write(0x20, 0x0A);
-    cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_indirect_x();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02));
+    }
 
-    cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
-    assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02 + 0x13));
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_indirect_x_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.x = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F + 0x13, 0x02);
+        cpu.memory.borrow_mut().write(0x20 + 0x13, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02, 0x5A);
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_indirect_y_changes_and_accumulator() {
-    let mut cpu = create_test_cpu();
-    cpu.program_counter = 0x234;
-    cpu.a = 0x72;
-    cpu.y = 0x13;
-    cpu.memory.borrow_mut().write(0x234, 0x1F);
-    cpu.memory.borrow_mut().write(0x1F, 0x02);
-    cpu.memory.borrow_mut().write(0x20, 0x0A);
-    cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
+        cpu.unofficial_rotate_right_memory_add_acc_indirect_x();
+        assert_eq!(0x72 + 0x2D, cpu.a);
+    }
 
-    cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
-    assert_eq!(0x5F, cpu.a);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_indirect_x_takes_8_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_indirect_x();
+        assert_eq!(8, cpu.wait_counter);
+    }
 
-#[test]
-fn unofficial_shift_right_memory_xor_acc_indirect_y_takes_8_cycles() {
-    let mut cpu = create_test_cpu();
-    cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
-    assert_eq!(8, cpu.wait_counter);
-}
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_indirect_y_changes_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.y = 0x13;
+        cpu.program_counter = 0x234;
 
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F, 0x02);
+        cpu.memory.borrow_mut().write(0x20, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
+        cpu.unofficial_rotate_right_memory_add_acc_indirect_y();
+        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02 + 0x13));
+    }
 
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_indirect_y_changes_and_accumulator() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.a = 0x72;
+        cpu.y = 0x13;
+        cpu.memory.borrow_mut().write(0x234, 0x1F);
+        cpu.memory.borrow_mut().write(0x1F, 0x02);
+        cpu.memory.borrow_mut().write(0x20, 0x0A);
+        cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
+        cpu.unofficial_rotate_right_memory_add_acc_indirect_y();
+        assert_eq!(0x72 + 0x2D, cpu.a);
+    }
 
+    #[test]
+    fn unofficial_rotate_right_memory_add_acc_indirect_y_takes_8_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_rotate_right_memory_add_acc_indirect_y();
+        assert_eq!(8, cpu.wait_counter);
+    }
 
     #[test]
     fn no_operation_waits_2_cycles() {
