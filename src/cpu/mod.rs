@@ -5,8 +5,12 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 // official opcodes: http://www.obelisk.demon.co.uk/6502/reference.html
-// unofficial opcodes: http://www.ataripreservation.org/websites/freddy.offenga/illopc31.txt
 // addressing modes: http://www.obelisk.demon.co.uk/6502/addressing.html
+
+// unofficial opcodes: http://www.ataripreservation.org/websites/freddy.offenga/illopc31.txt
+// and http://www.oxyron.de/html/opcodes02.html.
+// The documentation on behaviour of unofficial opcodes is occasionally conflicting.
+// Conflicts have been solved by observing existing emulator behaviour (hopefully they got it right)
 
 #[derive(Debug)]
 pub struct Cpu {
@@ -1545,40 +1549,22 @@ impl Cpu {
     }
 
     fn unofficial_and_a_with_x_store_result_zero_page(&mut self) {
-         // do_and overwrites a as this is the only behaviour in legit opcodes
-         // we need to save the register to make this actually work
-         let original_a = self.a;
-         let x = self.x;
-         self.do_and(x);
-         let result = self.a;
-         self.a = original_a;
+         let result = self.a & self.x;
          self.do_zero_page_store(result);
     }
 
     fn unofficial_and_a_with_x_store_result_zero_page_y(&mut self) {
-        let original_a = self.a;
-        let x = self.x;
-        self.do_and(x);
-        let result = self.a;
-        self.a = original_a;
+        let result = self.a & self.x;
         self.do_zero_page_y_store(result);
     }
 
     fn unofficial_and_a_with_x_store_result_absolute(&mut self) {
-        let original_a = self.a;
-        let x = self.x;
-        self.do_and(x);
-        let result = self.a;
-        self.a = original_a;
+        let result = self.a & self.x;
         self.do_absolute_store(result);
     }
 
     fn unofficial_and_a_with_x_store_result_indirect_x(&mut self) {
-        let original_a = self.a;
-        let x = self.x;
-        self.do_and(x);
-        let result = self.a;
-        self.a = original_a;
+        let result = self.a & self.x;
         self.do_indirect_x_store(result);
     }
 
@@ -7318,6 +7304,16 @@ mod tests {
     }
 
     #[test]
+    fn unofficial_and_a_with_x_store_result_zero_page_does_not_modify_status_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x0;
+        cpu.x = 0xFA;
+        cpu.status_flags = 0x80;
+        cpu.unofficial_and_a_with_x_store_result_zero_page();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
     fn unofficial_and_a_with_x_store_result_zero_page_page_writes_result_to_memory() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x43;
@@ -7336,6 +7332,16 @@ mod tests {
         cpu.unofficial_and_a_with_x_store_result_zero_page_y();
         assert_eq!(0x42, cpu.a);
         assert_eq!(0xFA, cpu.x);
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_zero_page_y_does_not_modify_status_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x0;
+        cpu.x = 0xFA;
+        cpu.status_flags = 0x80;
+        cpu.unofficial_and_a_with_x_store_result_zero_page_y();
+        assert_eq!(0x80, cpu.status_flags);
     }
 
     #[test]
@@ -7361,6 +7367,16 @@ mod tests {
     }
 
     #[test]
+    fn unofficial_and_a_with_x_store_result_absolute_does_not_modify_status_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x0;
+        cpu.x = 0xFA;
+        cpu.status_flags = 0x80;
+        cpu.unofficial_and_a_with_x_store_result_absolute();
+        assert_eq!(0x80, cpu.status_flags);
+    }
+
+    #[test]
     fn unofficial_and_a_with_x_store_result_absolute_writes_result_to_memory() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x43;
@@ -7373,6 +7389,7 @@ mod tests {
         cpu.unofficial_and_a_with_x_store_result_absolute();
         assert_eq!(0x42, cpu.memory.borrow().read(0x7F02));
     }
+
     #[test]
     fn unofficial_and_a_with_x_store_result_indirect_x_does_not_modify_registers() {
         let mut cpu = create_test_cpu();
@@ -7381,6 +7398,17 @@ mod tests {
         cpu.unofficial_and_a_with_x_store_result_indirect_x();
         assert_eq!(0x42, cpu.a);
         assert_eq!(0xFA, cpu.x);
+    }
+
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_indirect_x_does_not_modify_status_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x0;
+        cpu.x = 0xFA;
+        cpu.status_flags = 0x80;
+        cpu.unofficial_and_a_with_x_store_result_indirect_x();
+        assert_eq!(0x80, cpu.status_flags);
     }
 
     #[test]
@@ -7393,7 +7421,6 @@ mod tests {
         cpu.memory.borrow_mut().write(0xABC, 0x02);
         cpu.memory.borrow_mut().write(0x02 + 0xFA, 0xAF);
         cpu.memory.borrow_mut().write(0x03 + 0xFA, 0xEF);
-
 
         cpu.unofficial_and_a_with_x_store_result_indirect_x();
         assert_eq!(0x42, cpu.memory.borrow().read(0xEFAF));
