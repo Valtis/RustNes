@@ -137,20 +137,24 @@ impl Cpu {
             128 => self.unofficial_double_no_operation(2),
             129 => self.store_a_indirect_x(),
             130 => self.unofficial_double_no_operation(2),
+            131 => self.unofficial_and_a_with_x_store_result_indirect_x(),
             132 => self.store_y_zero_page(),
             133 => self.store_a_zero_page(),
             134 => self.store_x_zero_page(),
+            135 => self.unofficial_and_a_with_x_store_result_zero_page(),
             136 => self.decrease_y(),
             137 => self.unofficial_double_no_operation(2),
             138 => self.transfer_x_to_accumulator(),
             140 => self.store_y_absolute(),
             141 => self.store_a_absolute(),
             142 => self.store_x_absolute(),
+            143 => self.unofficial_and_a_with_x_store_result_absolute(),
             144 => self.branch_if_carry_clear(),
             145 => self.store_a_indirect_y(),
             148 => self.store_y_zero_page_x(),
             149 => self.store_a_zero_page_x(),
             150 => self.store_x_zero_page_y(),
+            151 => self.unofficial_and_a_with_x_store_result_zero_page_y(),
             152 => self.transfer_y_to_accumulator(),
             153 => self.store_a_absolute_y(),
             154 => self.transfer_x_to_stack_pointer(),
@@ -1539,6 +1543,45 @@ impl Cpu {
     fn no_operation(&mut self) {
         self.wait_counter = 2;
     }
+
+    fn unofficial_and_a_with_x_store_result_zero_page(&mut self) {
+         // do_and overwrites a as this is the only behaviour in legit opcodes
+         // we need to save the register to make this actually work
+         let original_a = self.a;
+         let x = self.x;
+         self.do_and(x);
+         let result = self.a;
+         self.a = original_a;
+         self.do_zero_page_store(result);
+    }
+
+    fn unofficial_and_a_with_x_store_result_zero_page_y(&mut self) {
+        let original_a = self.a;
+        let x = self.x;
+        self.do_and(x);
+        let result = self.a;
+        self.a = original_a;
+        self.do_zero_page_y_store(result);
+    }
+
+    fn unofficial_and_a_with_x_store_result_absolute(&mut self) {
+        let original_a = self.a;
+        let x = self.x;
+        self.do_and(x);
+        let result = self.a;
+        self.a = original_a;
+        self.do_absolute_store(result);
+    }
+
+    fn unofficial_and_a_with_x_store_result_indirect_x(&mut self) {
+        let original_a = self.a;
+        let x = self.x;
+        self.do_and(x);
+        let result = self.a;
+        self.a = original_a;
+        self.do_indirect_x_store(result);
+    }
+
 
     // unofficial\illegal instructions may basically just do a read without
     // doing anything else with the result
@@ -7262,6 +7305,98 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.decrease_memory_absolute_x();
         assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_zero_page_does_not_modify_registers() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x42;
+        cpu.x = 0xFA;
+        cpu.unofficial_and_a_with_x_store_result_zero_page();
+        assert_eq!(0x42, cpu.a);
+        assert_eq!(0xFA, cpu.x);
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_zero_page_page_writes_result_to_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x43;
+        cpu.x = 0xFA;
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x70);
+        cpu.unofficial_and_a_with_x_store_result_zero_page();
+        assert_eq!(0x42, cpu.memory.borrow().read(0x70));
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_zero_page_y_does_not_modify_registers() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x42;
+        cpu.x = 0xFA;
+        cpu.unofficial_and_a_with_x_store_result_zero_page_y();
+        assert_eq!(0x42, cpu.a);
+        assert_eq!(0xFA, cpu.x);
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_zero_page_y_writes_result_to_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x43;
+        cpu.x = 0xFA;
+        cpu.y = 0x5D;
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x70);
+        cpu.unofficial_and_a_with_x_store_result_zero_page_y();
+        assert_eq!(0x42, cpu.memory.borrow().read(0x70 + 0x5D));
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_absolute_does_not_modify_registers() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x42;
+        cpu.x = 0xFA;
+        cpu.unofficial_and_a_with_x_store_result_absolute();
+        assert_eq!(0x42, cpu.a);
+        assert_eq!(0xFA, cpu.x);
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_absolute_writes_result_to_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x43;
+        cpu.x = 0xFA;
+        cpu.y = 0x5D;
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x02);
+        cpu.memory.borrow_mut().write(0xABD, 0x7F);
+
+        cpu.unofficial_and_a_with_x_store_result_absolute();
+        assert_eq!(0x42, cpu.memory.borrow().read(0x7F02));
+    }
+    #[test]
+    fn unofficial_and_a_with_x_store_result_indirect_x_does_not_modify_registers() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x42;
+        cpu.x = 0xFA;
+        cpu.unofficial_and_a_with_x_store_result_indirect_x();
+        assert_eq!(0x42, cpu.a);
+        assert_eq!(0xFA, cpu.x);
+    }
+
+    #[test]
+    fn unofficial_and_a_with_x_store_result_indirect_x_writes_result_to_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.a = 0x43;
+        cpu.x = 0xFA;
+        cpu.y = 0x5D;
+        cpu.program_counter = 0xABC;
+        cpu.memory.borrow_mut().write(0xABC, 0x02);
+        cpu.memory.borrow_mut().write(0x02 + 0xFA, 0xAF);
+        cpu.memory.borrow_mut().write(0x03 + 0xFA, 0xEF);
+
+
+        cpu.unofficial_and_a_with_x_store_result_indirect_x();
+        assert_eq!(0x42, cpu.memory.borrow().read(0xEFAF));
     }
 
     #[test]
