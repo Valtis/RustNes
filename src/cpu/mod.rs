@@ -198,57 +198,64 @@ impl Cpu {
             192 => self.compare_y_immediate(),
             193 => self.compare_indirect_x(),
             194 => self.unofficial_double_no_operation(2),
-            195 => self.unofficial_decrease_memory_and_compare_with_acc_indirect_x(),
+            195 => self.unofficial_decrement_memory_and_compare_with_acc_indirect_x(),
             196 => self.compare_y_zero_page(),
             197 => self.compare_zero_page(),
-            198 => self.decrease_memory_zero_page(),
-            199 => self.unofficial_decrease_memory_and_compare_with_acc_zero_page(),
+            198 => self.decrement_memory_zero_page(),
+            199 => self.unofficial_decrement_memory_and_compare_with_acc_zero_page(),
             200 => self.increase_y(),
             201 => self.compare_immediate(),
             202 => self.decrease_x(),
             204 => self.compare_y_absolute(),
             205 => self.compare_absolute(),
-            206 => self.decrease_memory_absolute(),
-            207 => self.unofficial_decrease_memory_and_compare_with_acc_absolute(),
+            206 => self.decrement_memory_absolute(),
+            207 => self.unofficial_decrement_memory_and_compare_with_acc_absolute(),
             208 => self.branch_if_not_equal(),
             209 => self.compare_indirect_y(),
-            211 => self.unofficial_decrease_memory_and_compare_with_acc_indirect_y(),
+            211 => self.unofficial_decrement_memory_and_compare_with_acc_indirect_y(),
             212 => self.unofficial_double_no_operation(4),
             213 => self.compare_zero_page_x(),
-            214 => self.decrease_memory_zero_page_x(),
-            215 => self.unofficial_decrease_memory_and_compare_with_acc_zero_page_x(),
+            214 => self.decrement_memory_zero_page_x(),
+            215 => self.unofficial_decrement_memory_and_compare_with_acc_zero_page_x(),
             216 => self.clear_decimal_flag(),
             217 => self.compare_absolute_y(),
             218 => self.unofficial_nop(),
-            219 => self.unofficial_decrease_memory_and_compare_with_acc_absolute_y(),
+            219 => self.unofficial_decrement_memory_and_compare_with_acc_absolute_y(),
             220 => self.unofficial_triple_no_operation_page_penalty(4),
             221 => self.compare_absolute_x(),
-            222 => self.decrease_memory_absolute_x(),
-            223 => self.unofficial_decrease_memory_and_compare_with_acc_absolute_x(),
+            222 => self.decrement_memory_absolute_x(),
+            223 => self.unofficial_decrement_memory_and_compare_with_acc_absolute_x(),
             224 => self.compare_x_immediate(),
             225 => self.subtract_indirect_x(),
             226 => self.unofficial_double_no_operation(2),
+            227 => self.unofficial_increment_memory_subtract_acc_indirect_x(),
             228 => self.compare_x_zero_page(),
             229 => self.subtract_zero_page(),
-            230 => self.increase_memory_zero_page(),
+            230 => self.increment_memory_zero_page(),
+            231 => self.unofficial_increment_memory_subtract_acc_zero_page(),
             232 => self.increase_x(),
             233 => self.subtract_immediate(),
             234 => self.no_operation(),
             235 => self.unofficial_subtract_immediate(),
             236 => self.compare_x_absolute(),
             237 => self.subtract_absolute(),
-            238 => self.increase_memory_absolute(),
+            238 => self.increment_memory_absolute(),
+            239 => self.unofficial_increment_memory_subtract_acc_absolute(),
             240 => self.branch_if_equal(),
             241 => self.subtract_indirect_y(),
+            243 => self.unofficial_increment_memory_subtract_acc_indirect_y(),
             244 => self.unofficial_double_no_operation(4),
             245 => self.subtract_zero_page_x(),
-            246 => self.increase_memory_zero_page_x(),
+            246 => self.increment_memory_zero_page_x(),
+            247 => self.unofficial_increment_memory_subtract_acc_zero_page_x(),
             248 => self.set_decimal_flag(),
             249 => self.subtract_absolute_y(),
             250 => self.unofficial_nop(),
+            251 => self.unofficial_increment_memory_subtract_acc_absolute_y(),
             252 => self.unofficial_triple_no_operation_page_penalty(4),
             253 => self.subtract_absolute_x(),
-            254 => self.increase_memory_absolute_x(),
+            254 => self.increment_memory_absolute_x(),
+            255 => self.unofficial_increment_memory_subtract_acc_absolute_x(),
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.program_counter - 1, self),
         }
@@ -598,13 +605,13 @@ impl Cpu {
         result
     }
 
-    fn do_increase(&mut self, value: u8) -> u8 {
+    fn do_increment(&mut self, value: u8) -> u8 {
         let result = (value as u16) + 1;
         self.set_zero_negative_flags((result & 0xFF) as u8);
         (result & 0xFF) as u8
     }
 
-    fn do_decrease(&mut self, value: u8) -> u8 {
+    fn do_decrement(&mut self, value: u8) -> u8 {
         let result = (value as i16) - 1;
         self.set_zero_negative_flags((result & 0xFF) as u8);
         (result & 0xFF) as u8
@@ -1476,87 +1483,87 @@ impl Cpu {
     fn increase_x(&mut self) {
         self.wait_counter = 2;
         let value = self.x;
-        self.x = self.do_increase(value);
+        self.x = self.do_increment(value);
     }
 
 
     fn decrease_x(&mut self) {
         self.wait_counter = 2;
         let value = self.x;
-        self.x = self.do_decrease(value);
+        self.x = self.do_decrement(value);
     }
 
     fn increase_y(&mut self) {
         self.wait_counter = 2;
         let value = self.y;
-        self.y = self.do_increase(value);
+        self.y = self.do_increment(value);
     }
 
     fn decrease_y(&mut self) {
         self.wait_counter = 2;
         let value = self.y;
-        self.y = self.do_decrease(value);
+        self.y = self.do_decrement(value);
     }
 
-    fn increase_memory_zero_page(&mut self) {
+    fn increment_memory_zero_page(&mut self) {
         let value = self.read_zero_page();
-        let result = self.do_increase(value);
+        let result = self.do_increment(value);
         self.program_counter -= 1; // need the zero page address again
         self.do_zero_page_store(result);
         self.wait_counter = 5;
     }
 
-    fn increase_memory_zero_page_x(&mut self) {
+    fn increment_memory_zero_page_x(&mut self) {
         let value = self.read_zero_page_x();
-        let result = self.do_increase(value);
+        let result = self.do_increment(value);
         self.program_counter -= 1; // need the zero page address again
         self.do_zero_page_x_store(result);
         self.wait_counter = 6;
     }
 
-    fn increase_memory_absolute(&mut self) {
+    fn increment_memory_absolute(&mut self) {
         let value = self.read_absolute();
-        let result = self.do_increase(value);
+        let result = self.do_increment(value);
         self.program_counter -= 2; // need the zero page address again
         self.do_absolute_store(result);
         self.wait_counter = 6;
     }
 
-    fn increase_memory_absolute_x(&mut self) {
+    fn increment_memory_absolute_x(&mut self) {
         let value = self.read_absolute_x();
-        let result = self.do_increase(value);
+        let result = self.do_increment(value);
         self.program_counter -= 2; // need the zero page address again
         self.do_absolute_x_store(result);
         self.wait_counter = 7;
     }
 
-    fn decrease_memory_zero_page(&mut self) {
+    fn decrement_memory_zero_page(&mut self) {
         let value = self.read_zero_page();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 1; // need the zero page address again
         self.do_zero_page_store(result);
         self.wait_counter = 5;
     }
 
-    fn decrease_memory_zero_page_x(&mut self) {
+    fn decrement_memory_zero_page_x(&mut self) {
         let value = self.read_zero_page_x();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 1; // need the zero page address again
         self.do_zero_page_x_store(result);
         self.wait_counter = 6;
     }
 
-    fn decrease_memory_absolute(&mut self) {
+    fn decrement_memory_absolute(&mut self) {
         let value = self.read_absolute();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 2; // need the zero page address again
         self.do_absolute_store(result);
         self.wait_counter = 6;
     }
 
-    fn decrease_memory_absolute_x(&mut self) {
+    fn decrement_memory_absolute_x(&mut self) {
         let value = self.read_absolute_x();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 2; // need the zero page address again
         self.do_absolute_x_store(result);
         self.wait_counter = 7;
@@ -1587,8 +1594,8 @@ impl Cpu {
     }
 
 
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page(&mut self) {
-        self.decrease_memory_zero_page();
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page(&mut self) {
+        self.decrement_memory_zero_page();
         self.program_counter -= 1;
         let result = self.read_zero_page();
         let register = self.a;
@@ -1596,8 +1603,8 @@ impl Cpu {
         self.wait_counter = 5;
     }
 
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_x(&mut self) {
-        self.decrease_memory_zero_page_x();
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_x(&mut self) {
+        self.decrement_memory_zero_page_x();
         self.program_counter -= 1;
         let result = self.read_zero_page_x();
         let register = self.a;
@@ -1605,8 +1612,8 @@ impl Cpu {
         self.wait_counter = 6;
     }
 
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute(&mut self) {
-        self.decrease_memory_absolute();
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute(&mut self) {
+        self.decrement_memory_absolute();
         self.program_counter -= 2;
         let result = self.read_absolute();
         let register = self.a;
@@ -1614,8 +1621,8 @@ impl Cpu {
         self.wait_counter = 6;
     }
 
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_x(&mut self) {
-        self.decrease_memory_absolute_x();
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_x(&mut self) {
+        self.decrement_memory_absolute_x();
         self.program_counter -= 2;
         let result = self.read_absolute_x();
         let register = self.a;
@@ -1623,9 +1630,9 @@ impl Cpu {
         self.wait_counter = 7;
     }
 
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_y(&mut self) {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_y(&mut self) {
         let value = self.read_absolute_y();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 2;
         self.do_absolute_y_store(result);
 
@@ -1634,9 +1641,9 @@ impl Cpu {
         self.wait_counter = 7;
     }
 
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_x(&mut self) {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_x(&mut self) {
         let value = self.read_indirect_x();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 1;
         self.do_indirect_x_store(result);
 
@@ -1645,14 +1652,76 @@ impl Cpu {
         self.wait_counter = 8;
     }
 
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_y(&mut self) {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_y(&mut self) {
         let value = self.read_indirect_y();
-        let result = self.do_decrease(value);
+        let result = self.do_decrement(value);
         self.program_counter -= 1;
         self.do_indirect_y_store(result);
 
         let register = self.a;
         self.do_compare(register, result);
+        self.wait_counter = 8;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_zero_page(&mut self) {
+        self.increment_memory_zero_page();
+        self.program_counter -= 1;
+        let result = self.read_zero_page();
+        self.do_subtract(result);
+        self.wait_counter = 5;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_zero_page_x(&mut self) {
+        self.increment_memory_zero_page_x();
+        self.program_counter -= 1;
+        let result = self.read_zero_page_x();
+        self.do_subtract(result);
+        self.wait_counter = 6;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_absolute(&mut self) {
+        self.increment_memory_absolute();
+        self.program_counter -= 2;
+        let result = self.read_absolute();
+        self.do_subtract(result);
+        self.wait_counter = 6;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_absolute_x(&mut self) {
+        self.increment_memory_absolute_x();
+        self.program_counter -= 2;
+        let result = self.read_absolute_x();
+        self.do_subtract(result);
+        self.wait_counter = 7;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_absolute_y(&mut self) {
+        let value = self.read_absolute_y();
+        let result = self.do_increment(value);
+        self.program_counter -= 2; // need the zero page address again
+        self.do_absolute_y_store(result);
+
+        self.do_subtract(result);
+        self.wait_counter = 7;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_indirect_x(&mut self) {
+        let value = self.read_indirect_x();
+        let result = self.do_increment(value);
+        self.program_counter -= 1; // need the zero page address again
+        self.do_indirect_x_store(result);
+
+        self.do_subtract(result);
+        self.wait_counter = 8;
+    }
+
+    fn unofficial_increment_memory_subtract_acc_indirect_y(&mut self) {
+        let value = self.read_indirect_y();
+        let result = self.do_increment(value);
+        self.program_counter -= 1; // need the zero page address again
+        self.do_indirect_y_store(result);
+
+        self.do_subtract(result);
         self.wait_counter = 8;
     }
 
@@ -3677,90 +3746,90 @@ mod tests {
 
 
     #[test]
-    fn do_increase_increases_value_by_one() {
+    fn do_increment_increases_value_by_one() {
         let mut cpu = create_test_cpu();
-        assert_eq!(21, cpu.do_increase(20));
+        assert_eq!(21, cpu.do_increment(20));
     }
 
     #[test]
-    fn do_increase_handles_overflow() {
+    fn do_increment_handles_overflow() {
         let mut cpu = create_test_cpu();
-        assert_eq!(0, cpu.do_increase(255));
+        assert_eq!(0, cpu.do_increment(255));
     }
 
     #[test]
-    fn do_increase_negative_flag_if_result_is_negative() {
+    fn do_increment_negative_flag_if_result_is_negative() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.do_increase(0x7F);
+        cpu.do_increment(0x7F);
         assert_eq!(0x80, cpu.status_flags);
     }
 
     #[test]
-    fn do_increase_clears_negative_flag_if_result_is_positive() {
+    fn do_increment_clears_negative_flag_if_result_is_positive() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
-        cpu.do_increase(0x5);
+        cpu.do_increment(0x5);
         assert_eq!(0x00, cpu.status_flags);
     }
 
     #[test]
-    fn do_increase_sets_zero_flag_if_result_is_zero() {
+    fn do_increment_sets_zero_flag_if_result_is_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.do_increase(0xFF);
+        cpu.do_increment(0xFF);
         assert_eq!(0x02, cpu.status_flags);
     }
 
     #[test]
-    fn do_increase_clears_zero_flag_if_result_is_non_zero() {
+    fn do_increment_clears_zero_flag_if_result_is_non_zero() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
-        cpu.do_increase(0x05);
+        cpu.do_increment(0x05);
         assert_eq!(0x00, cpu.status_flags);
     }
 
     #[test]
-    fn do_decrease_decreases_y_by_one() {
+    fn do_decrement_decreases_y_by_one() {
         let mut cpu = create_test_cpu();
-        assert_eq!(20, cpu.do_decrease(21));
+        assert_eq!(20, cpu.do_decrement(21));
     }
 
     #[test]
-    fn do_decrease_handles_overflow() {
+    fn do_decrement_handles_overflow() {
         let mut cpu = create_test_cpu();
-        assert_eq!(255, cpu.do_decrease(0));
+        assert_eq!(255, cpu.do_decrement(0));
     }
 
     #[test]
-    fn do_decrease_sets_negative_flag() {
+    fn do_decrement_sets_negative_flag() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.do_decrease(255);
+        cpu.do_decrement(255);
         assert_eq!(0x80, cpu.status_flags);
     }
 
     #[test]
-    fn do_decrease_clears_negative_flag() {
+    fn do_decrement_clears_negative_flag() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x80;
-        cpu.do_decrease(80);
+        cpu.do_decrement(80);
         assert_eq!(0x00, cpu.status_flags);
     }
 
     #[test]
-    fn do_decrease_sets_zero_flag() {
+    fn do_decrement_sets_zero_flag() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x00;
-        cpu.do_decrease(1);
+        cpu.do_decrement(1);
         assert_eq!(0x02, cpu.status_flags);
     }
 
     #[test]
-    fn do_decrease_clears_zero_flag() {
+    fn do_decrement_clears_zero_flag() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0x02;
-        cpu.do_decrease(80);
+        cpu.do_decrement(80);
         assert_eq!(0x00, cpu.status_flags);
     }
 
@@ -7169,85 +7238,85 @@ mod tests {
     }
 
     #[test]
-    fn increase_memory_zero_page_increases_value_in_memory() {
+    fn increment_memory_zero_page_increases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.memory.borrow_mut().write(0x70, 43);
-        cpu.increase_memory_zero_page();
+        cpu.increment_memory_zero_page();
         assert_eq!(44, cpu.memory.borrow_mut().read(0x70));
     }
 
     #[test]
-    fn increase_memory_zero_page_increments_program_counter() {
+    fn increment_memory_zero_page_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.increase_memory_zero_page();
+        cpu.increment_memory_zero_page();
         assert_eq!(0xABD, cpu.program_counter);
     }
 
     #[test]
-    fn increase_memory_zero_page_takes_5_cycles() {
+    fn increment_memory_zero_page_takes_5_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.increase_memory_zero_page();
+        cpu.increment_memory_zero_page();
         assert_eq!(5, cpu.wait_counter);
     }
 
     #[test]
-    fn increase_memory_zero_page_x_increases_value_in_memory() {
+    fn increment_memory_zero_page_x_increases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.x = 0x24;
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.memory.borrow_mut().write(0x70 + 0x24, 43);
-        cpu.increase_memory_zero_page_x();
+        cpu.increment_memory_zero_page_x();
         assert_eq!(44, cpu.memory.borrow_mut().read(0x70 + 0x24));
     }
 
     #[test]
-    fn increase_memory_zero_page_x_increments_program_counter() {
+    fn increment_memory_zero_page_x_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.increase_memory_zero_page_x();
+        cpu.increment_memory_zero_page_x();
         assert_eq!(0xABD, cpu.program_counter);
     }
 
     #[test]
-    fn increase_memory_zero_page_x_takes_6_cycles() {
+    fn increment_memory_zero_page_x_takes_6_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.increase_memory_zero_page_x();
+        cpu.increment_memory_zero_page_x();
         assert_eq!(6, cpu.wait_counter);
     }
 
     #[test]
-    fn increase_memory_absolute_increases_value_in_memory() {
+    fn increment_memory_absolute_increases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.memory.borrow_mut().write(0xABD, 0x02);
 
         cpu.memory.borrow_mut().write(0x0270, 43);
-        cpu.increase_memory_absolute();
+        cpu.increment_memory_absolute();
         assert_eq!(44, cpu.memory.borrow_mut().read(0x0270));
     }
 
     #[test]
-    fn increase_memory_absolute_increments_program_counter() {
+    fn increment_memory_absolute_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.increase_memory_absolute();
+        cpu.increment_memory_absolute();
         assert_eq!(0xABE, cpu.program_counter);
     }
 
     #[test]
-    fn increase_memory_absolute_takes_6_cycles() {
+    fn increment_memory_absolute_takes_6_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.increase_memory_absolute();
+        cpu.increment_memory_absolute();
         assert_eq!(6, cpu.wait_counter);
     }
 
     #[test]
-    fn increase_memory_absolute_x_increases_value_in_memory() {
+    fn increment_memory_absolute_x_increases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
         cpu.x = 0x53;
@@ -7255,105 +7324,105 @@ mod tests {
         cpu.memory.borrow_mut().write(0xABD, 0x02);
 
         cpu.memory.borrow_mut().write(0x0270 + 0x53, 43);
-        cpu.increase_memory_absolute_x();
+        cpu.increment_memory_absolute_x();
         assert_eq!(44, cpu.memory.borrow_mut().read(0x0270 + 0x53));
     }
 
     #[test]
-    fn increase_memory_absolute_x_increments_program_counter() {
+    fn increment_memory_absolute_x_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.increase_memory_absolute_x();
+        cpu.increment_memory_absolute_x();
         assert_eq!(0xABE, cpu.program_counter);
     }
 
     #[test]
-    fn increase_memory_absolute_x_takes_7_cycles() {
+    fn increment_memory_absolute_x_takes_7_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.increase_memory_absolute_x();
+        cpu.increment_memory_absolute_x();
         assert_eq!(7, cpu.wait_counter);
     }
 
     #[test]
-    fn decrease_memory_zero_page_decreases_value_in_memory() {
+    fn decrement_memory_zero_page_decreases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.memory.borrow_mut().write(0x70, 43);
-        cpu.decrease_memory_zero_page();
+        cpu.decrement_memory_zero_page();
         assert_eq!(42, cpu.memory.borrow_mut().read(0x70));
     }
 
     #[test]
-    fn decrease_memory_zero_page_increments_program_counter() {
+    fn decrement_memory_zero_page_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.decrease_memory_zero_page();
+        cpu.decrement_memory_zero_page();
         assert_eq!(0xABD, cpu.program_counter);
     }
 
     #[test]
-    fn decrease_memory_zero_page_takes_5_cycles() {
+    fn decrement_memory_zero_page_takes_5_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.decrease_memory_zero_page();
+        cpu.decrement_memory_zero_page();
         assert_eq!(5, cpu.wait_counter);
     }
 
     #[test]
-    fn decrease_memory_zero_page_x_decreases_value_in_memory() {
+    fn decrement_memory_zero_page_x_decreases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.x = 0x24;
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.memory.borrow_mut().write(0x70 + 0x24, 43);
-        cpu.decrease_memory_zero_page_x();
+        cpu.decrement_memory_zero_page_x();
         assert_eq!(42, cpu.memory.borrow_mut().read(0x70 + 0x24));
     }
 
     #[test]
-    fn decrease_memory_zero_page_x_increments_program_counter() {
+    fn decrement_memory_zero_page_x_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.decrease_memory_zero_page_x();
+        cpu.decrement_memory_zero_page_x();
         assert_eq!(0xABD, cpu.program_counter);
     }
 
     #[test]
-    fn decrease_memory_zero_page_x_takes_6_cycles() {
+    fn decrement_memory_zero_page_x_takes_6_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.decrease_memory_zero_page_x();
+        cpu.decrement_memory_zero_page_x();
         assert_eq!(6, cpu.wait_counter);
     }
 
     #[test]
-    fn decrease_memory_absolute_decreases_value_in_memory() {
+    fn decrement_memory_absolute_decreases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.memory.borrow_mut().write(0xABD, 0x02);
 
         cpu.memory.borrow_mut().write(0x0270, 43);
-        cpu.decrease_memory_absolute();
+        cpu.decrement_memory_absolute();
         assert_eq!(42, cpu.memory.borrow_mut().read(0x0270));
     }
 
     #[test]
-    fn decrease_memory_absolute_increments_program_counter() {
+    fn decrement_memory_absolute_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.decrease_memory_absolute();
+        cpu.decrement_memory_absolute();
         assert_eq!(0xABE, cpu.program_counter);
     }
 
     #[test]
-    fn decrease_memory_absolute_takes_6_cycles() {
+    fn decrement_memory_absolute_takes_6_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.decrease_memory_absolute();
+        cpu.decrement_memory_absolute();
         assert_eq!(6, cpu.wait_counter);
     }
 
     #[test]
-    fn decrease_memory_absolute_x_decreases_value_in_memory() {
+    fn decrement_memory_absolute_x_decreases_value_in_memory() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
         cpu.x = 0x53;
@@ -7361,22 +7430,22 @@ mod tests {
         cpu.memory.borrow_mut().write(0xABD, 0x02);
 
         cpu.memory.borrow_mut().write(0x0270 + 0x53, 43);
-        cpu.decrease_memory_absolute_x();
+        cpu.decrement_memory_absolute_x();
         assert_eq!(42, cpu.memory.borrow_mut().read(0x0270 + 0x53));
     }
 
     #[test]
-    fn decrease_memory_absolute_x_increments_program_counter() {
+    fn decrement_memory_absolute_x_increments_program_counter() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0xABC;
-        cpu.decrease_memory_absolute_x();
+        cpu.decrement_memory_absolute_x();
         assert_eq!(0xABE, cpu.program_counter);
     }
 
     #[test]
-    fn decrease_memory_absolute_x_takes_7_cycles() {
+    fn decrement_memory_absolute_x_takes_7_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.decrease_memory_absolute_x();
+        cpu.decrement_memory_absolute_x();
         assert_eq!(7, cpu.wait_counter);
     }
 
@@ -7514,19 +7583,19 @@ mod tests {
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
         cpu.memory.borrow_mut().write(0x32, 0xAF);
         cpu.memory.borrow_mut().write(0xAF, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page();
         assert_eq!(0x4E, cpu.memory.borrow().read(0xAF));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0xF0;
         cpu.program_counter = 0x32;
@@ -7534,27 +7603,27 @@ mod tests {
         cpu.memory.borrow_mut().write(0x32, 0xAF);
         cpu.memory.borrow_mut().write(0xAF, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page();
         assert_eq!(0x81, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_a_zero_page_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_a_zero_page_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page();
         assert_eq!(0x33, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_takes_5_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_takes_5_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page();
         assert_eq!(5, cpu.wait_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_x_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_x_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
@@ -7562,12 +7631,12 @@ mod tests {
         cpu.memory.borrow_mut().write(0x32, 0xAF);
         cpu.memory.borrow_mut().write(0xAF + 0x10, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page_x();
         assert_eq!(0x4E, cpu.memory.borrow().read(0xAF + 0x10));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_x_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_x_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x15;
         cpu.x = 0x10;
@@ -7576,27 +7645,27 @@ mod tests {
         cpu.memory.borrow_mut().write(0x32, 0xAF);
         cpu.memory.borrow_mut().write(0xAF + 0x10, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page_x();
         assert_eq!(0x80, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_x_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_x_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page_x();
         assert_eq!(0x33, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_zero_page_x_takes_6_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_zero_page_x_takes_6_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_zero_page_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page_x();
         assert_eq!(6, cpu.wait_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
@@ -7605,12 +7674,12 @@ mod tests {
         cpu.memory.borrow_mut().write(0x33, 0x09);
         cpu.memory.borrow_mut().write(0x098F, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute();
         assert_eq!(0x4E, cpu.memory.borrow().read(0x098F));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_absolute_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_absolute_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x00;
         cpu.program_counter = 0x32;
@@ -7619,27 +7688,27 @@ mod tests {
         cpu.memory.borrow_mut().write(0x33, 0x09);
         cpu.memory.borrow_mut().write(0x098F, 0xFE);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute();
         assert_eq!(0x00, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute();
         assert_eq!(0x34, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_takes_6_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_takes_6_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute();
         assert_eq!(6, cpu.wait_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_x_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_x_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
@@ -7649,12 +7718,12 @@ mod tests {
         cpu.memory.borrow_mut().write(0x33, 0x09);
         cpu.memory.borrow_mut().write(0x098F + 0x42, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_x();
         assert_eq!(0x4E, cpu.memory.borrow().read(0x098F + 0x42));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_absolute_x_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_absolute_x_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x90;
         cpu.x = 0x20;
@@ -7664,27 +7733,27 @@ mod tests {
         cpu.memory.borrow_mut().write(0x33, 0x09);
         cpu.memory.borrow_mut().write(0x098F + 0x20, 0x3E);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_x();
         assert_eq!(0x01, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_x_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_x_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_x();
         assert_eq!(0x34, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_x_takes_7_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_x_takes_7_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_x();
         assert_eq!(7, cpu.wait_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_y_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_y_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
@@ -7694,12 +7763,12 @@ mod tests {
         cpu.memory.borrow_mut().write(0x33, 0x09);
         cpu.memory.borrow_mut().write(0x098F + 0x42, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_y();
         assert_eq!(0x4E, cpu.memory.borrow().read(0x098F + 0x42));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_absolute_y_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_absolute_y_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x90;
         cpu.y = 0x20;
@@ -7709,28 +7778,28 @@ mod tests {
         cpu.memory.borrow_mut().write(0x33, 0x09);
         cpu.memory.borrow_mut().write(0x098F + 0x20, 0x3E);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_y();
         assert_eq!(0x01, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_y_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_y_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_y();
         assert_eq!(0x34, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_absolute_y_takes_7_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_absolute_y_takes_7_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_absolute_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_y();
         assert_eq!(7, cpu.wait_counter);
     }
 
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_x_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_x_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
@@ -7741,12 +7810,12 @@ mod tests {
         cpu.memory.borrow_mut().write(0x3F + 0x20, 0x3F);
         cpu.memory.borrow_mut().write(0x3F07, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_x();
         assert_eq!(0x4E, cpu.memory.borrow().read(0x3F07));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_x_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_x_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x4E;
         cpu.x = 0x20;
@@ -7758,28 +7827,27 @@ mod tests {
         cpu.memory.borrow_mut().write(0x3F + 0x20, 0x3F);
         cpu.memory.borrow_mut().write(0x3F07, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_x();
         assert_eq!(0x03, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_x_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_x_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_x();
         assert_eq!(0x33, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_x_takes_8_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_x_takes_8_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_x();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_x();
         assert_eq!(8, cpu.wait_counter);
     }
 
-
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_y_decrements_memory() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_y_decrements_memory() {
         let mut cpu = create_test_cpu();
 
         cpu.program_counter = 0x32;
@@ -7790,12 +7858,12 @@ mod tests {
         cpu.memory.borrow_mut().write(0x3F, 0x3F);
         cpu.memory.borrow_mut().write(0x3F07 + 0x20, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_y();
         assert_eq!(0x4E, cpu.memory.borrow().read(0x3F07 + 0x20));
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_y_sets_flags() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_y_sets_flags() {
         let mut cpu = create_test_cpu();
         cpu.a = 0x4E;
         cpu.y = 0x20;
@@ -7807,24 +7875,338 @@ mod tests {
         cpu.memory.borrow_mut().write(0x3F, 0x3F);
         cpu.memory.borrow_mut().write(0x3F07 + 0x20, 0x4F);
 
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_y();
         assert_eq!(0x03, cpu.status_flags);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_y_updates_pc() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_y_updates_pc() {
         let mut cpu = create_test_cpu();
         cpu.program_counter = 0x32;
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_y();
         assert_eq!(0x33, cpu.program_counter);
     }
 
     #[test]
-    fn unofficial_decrease_memory_and_compare_with_acc_indirect_y_takes_8_cycles() {
+    fn unofficial_decrement_memory_and_compare_with_acc_indirect_y_takes_8_cycles() {
         let mut cpu = create_test_cpu();
-        cpu.unofficial_decrease_memory_and_compare_with_acc_indirect_y();
+        cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_y();
         assert_eq!(8, cpu.wait_counter);
     }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_zero_page_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_zero_page();
+        assert_eq!(0x51, cpu.memory.borrow().read(0x4F));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_zero_page_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x71;
+        cpu.a = 0x80;
+        cpu.status_flags = 0x01;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_zero_page();
+        assert_eq!(0x80 - 0x51, cpu.a); // carry not set === borrow set
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_zero_page_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_zero_page();
+        assert_eq!(0xFEE1, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_zero_page_takes_5_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_zero_page();
+        assert_eq!(5, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_zero_page_x_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x25;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F + 0x25, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_zero_page_x();
+        assert_eq!(0x51, cpu.memory.borrow().read(0x4F + 0x25));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_zero_page_x_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x71;
+        cpu.a = 0x80;
+        cpu.status_flags = 0x01;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x4F + 0x71, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_zero_page_x();
+        assert_eq!(0x80 - 0x51, cpu.a); // carry not set === borrow set
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_zero_page_x_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_zero_page_x();
+        assert_eq!(0xFEE1, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_zero_page_x_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_zero_page_x();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x235, 0x12);
+        cpu.memory.borrow_mut().write(0x124F, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_absolute();
+        assert_eq!(0x51, cpu.memory.borrow().read(0x124F));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_absolute_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x71;
+        cpu.a = 0x80;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x235, 0x12);
+        cpu.memory.borrow_mut().write(0x124F, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_absolute();
+        assert_eq!(0x80 - 0x51 - 1, cpu.a); // carry not set === borrow set
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_absolute();
+        assert_eq!(0xFEE2, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_takes_6_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_absolute();
+        assert_eq!(6, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_x_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x71;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x235, 0x12);
+        cpu.memory.borrow_mut().write(0x124F + 0x71, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_absolute_x();
+        assert_eq!(0x51, cpu.memory.borrow().read(0x124F + 0x71));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_absolute_x_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x71;
+        cpu.a = 0x80;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x235, 0x12);
+        cpu.memory.borrow_mut().write(0x124F + 0x71, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_absolute_x();
+        assert_eq!(0x80 - 0x51 - 1, cpu.a); // carry not set === borrow set
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_x_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_absolute_x();
+        assert_eq!(0xFEE2, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_absolute_x();
+        assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_y_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.y = 0x71;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x235, 0x12);
+        cpu.memory.borrow_mut().write(0x124F + 0x71, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_absolute_y();
+        assert_eq!(0x51, cpu.memory.borrow().read(0x124F + 0x71));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_absolute_y_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.y = 0x71;
+        cpu.a = 0x80;
+        cpu.status_flags = 0x01;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+        cpu.memory.borrow_mut().write(0x235, 0x12);
+        cpu.memory.borrow_mut().write(0x124F + 0x71, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_absolute_y();
+        assert_eq!(0x80 - 0x51, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_y_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_absolute_y();
+        assert_eq!(0xFEE2, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_absolute_y_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_absolute_y();
+        assert_eq!(7, cpu.wait_counter);
+    }
+
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_indirect_x_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.x = 0x30;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+
+        cpu.memory.borrow_mut().write(0x4F + 0x30, 0xA1);
+        cpu.memory.borrow_mut().write(0x50 + 0x30, 0xB2);
+
+        cpu.memory.borrow_mut().write(0xB2A1, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_indirect_x();
+        assert_eq!(0x51, cpu.memory.borrow().read(0xB2A1));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_indirect_x_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+
+        cpu.a = 0x80;
+        cpu.x = 0x30;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+
+        cpu.memory.borrow_mut().write(0x4F + 0x30, 0xA1);
+        cpu.memory.borrow_mut().write(0x50 + 0x30, 0xB2);
+        cpu.memory.borrow_mut().write(0xB2A1, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_indirect_x();
+        assert_eq!(0x80 - 0x51 - 1, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_indirect_x_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_indirect_x();
+        assert_eq!(0xFEE1, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_indirect_x_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_indirect_x();
+        assert_eq!(8, cpu.wait_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_indirect_y_increments_memory() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+        cpu.y = 0x30;
+
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+
+        cpu.memory.borrow_mut().write(0x4F, 0xA1);
+        cpu.memory.borrow_mut().write(0x50, 0xB2);
+
+        cpu.memory.borrow_mut().write(0xB2A1 + 0x30, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_indirect_y();
+        assert_eq!(0x51, cpu.memory.borrow().read(0xB2A1 + 0x30));
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtracts_acc_indirect_y_subtracts_result_from_a() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x234;
+
+        cpu.a = 0x80;
+        cpu.y = 0x30;
+        cpu.memory.borrow_mut().write(0x234, 0x4F);
+
+        cpu.memory.borrow_mut().write(0x4F, 0xA1);
+        cpu.memory.borrow_mut().write(0x50, 0xB2);
+        cpu.memory.borrow_mut().write(0xB2A1 + 0x30, 0x50);
+
+        cpu.unofficial_increment_memory_subtract_acc_indirect_y();
+        assert_eq!(0x80 - 0x51 - 1, cpu.a);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_indirect_y_updates_pc() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0xFEE0;
+        cpu.unofficial_increment_memory_subtract_acc_indirect_y();
+        assert_eq!(0xFEE1, cpu.program_counter);
+    }
+
+    #[test]
+    fn unofficial_increment_memory_subtract_acc_indirect_y_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.unofficial_increment_memory_subtract_acc_indirect_y();
+        assert_eq!(8, cpu.wait_counter);
+    }
+
 
     #[test]
     fn no_operation_waits_2_cycles() {
