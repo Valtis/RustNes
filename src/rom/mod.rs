@@ -69,7 +69,7 @@ fn get_offset_temp_hardcore_impl(length: u8, address: u16) -> usize {
 
 impl Memory for Rom {
 
-    fn read(&self, address: u16) -> u8 {
+    fn read(&mut self, address: u16) -> u8 {
         // TODO: Implement mappers & let them handle this
         // for now, mapper 0 is hardcoded (poorly)
 

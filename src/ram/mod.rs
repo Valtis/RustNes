@@ -15,7 +15,7 @@ impl fmt::Debug for Ram {
 }
 
 impl Memory for Ram {
-    fn read(&self, address: u16) -> u8 {
+    fn read(&mut self, address: u16) -> u8 {
         // ram mirroring
         if address < 0x2000 {
             self.memory[(address & 0x07FF) as usize]

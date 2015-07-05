@@ -9,7 +9,7 @@ pub struct MemoryBus {
 }
 
 impl Memory for MemoryBus {
-    fn read(&self, address: u16) -> u8 {
+    fn read(&mut self, address: u16) -> u8 {
         if address < 0x2000 {
             self.ram.read(address)
         } else if address >= 0x4020 {
@@ -59,7 +59,7 @@ mod tests {
     }
 
     impl Memory for MockMemory {
-        fn read(&self, address: u16) -> u8 {
+        fn read(&mut self, address: u16) -> u8 {
             self.memory[address as usize]
         }
 
@@ -69,12 +69,12 @@ mod tests {
     }
     // few helpers
     impl MemoryBus {
-        fn assert_value_present_in_ram_only(&self, address: u16, value: u8) {
+        fn assert_value_present_in_ram_only(&mut self, address: u16, value: u8) {
             assert_eq!(value, self.ram.read(address));
             assert!(self.rom.read(address) != value);
         }
 
-        fn assert_value_present_in_rom_only(&self, address: u16, value: u8) {
+        fn assert_value_present_in_rom_only(&mut self, address: u16, value: u8) {
             assert_eq!(value, self.rom.read(address));
             assert!(self.ram.read(address) != value);
         }

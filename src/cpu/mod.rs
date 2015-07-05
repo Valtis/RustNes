@@ -2107,7 +2107,7 @@ mod tests {
     }
 
     impl Memory for MockMemory {
-        fn read(&self, address: u16) -> u8 {
+        fn read(&mut self, address: u16) -> u8 {
             self.ram[address as usize]
         }
 
@@ -7791,7 +7791,7 @@ mod tests {
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.unofficial_and_a_with_x_store_result_zero_page();
-        assert_eq!(0x42, cpu.memory.borrow().read(0x70));
+        assert_eq!(0x42, cpu.memory.borrow_mut().read(0x70));
     }
 
     #[test]
@@ -7823,7 +7823,7 @@ mod tests {
         cpu.program_counter = 0xABC;
         cpu.memory.borrow_mut().write(0xABC, 0x70);
         cpu.unofficial_and_a_with_x_store_result_zero_page_y();
-        assert_eq!(0x42, cpu.memory.borrow().read(0x70 + 0x5D));
+        assert_eq!(0x42, cpu.memory.borrow_mut().read(0x70 + 0x5D));
     }
 
     #[test]
@@ -7857,7 +7857,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0xABD, 0x7F);
 
         cpu.unofficial_and_a_with_x_store_result_absolute();
-        assert_eq!(0x42, cpu.memory.borrow().read(0x7F02));
+        assert_eq!(0x42, cpu.memory.borrow_mut().read(0x7F02));
     }
 
     #[test]
@@ -7893,7 +7893,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x03 + 0xFA, 0xEF);
 
         cpu.unofficial_and_a_with_x_store_result_indirect_x();
-        assert_eq!(0x42, cpu.memory.borrow().read(0xEFAF));
+        assert_eq!(0x42, cpu.memory.borrow_mut().read(0xEFAF));
     }
 
     #[test]
@@ -7905,7 +7905,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0xAF, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0xAF));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0xAF));
     }
 
     #[test]
@@ -7946,7 +7946,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0xAF + 0x10, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_zero_page_x();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0xAF + 0x10));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0xAF + 0x10));
     }
 
     #[test]
@@ -7989,7 +7989,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x098F, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_absolute();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0x098F));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0x098F));
     }
 
     #[test]
@@ -8033,7 +8033,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x098F + 0x42, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_x();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0x098F + 0x42));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0x098F + 0x42));
     }
 
     #[test]
@@ -8078,7 +8078,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x098F + 0x42, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_absolute_y();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0x098F + 0x42));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0x098F + 0x42));
     }
 
     #[test]
@@ -8125,7 +8125,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x3F07, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_x();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0x3F07));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0x3F07));
     }
 
     #[test]
@@ -8173,7 +8173,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x3F07 + 0x20, 0x4F);
 
         cpu.unofficial_decrement_memory_and_compare_with_acc_indirect_y();
-        assert_eq!(0x4E, cpu.memory.borrow().read(0x3F07 + 0x20));
+        assert_eq!(0x4E, cpu.memory.borrow_mut().read(0x3F07 + 0x20));
     }
 
     #[test]
@@ -8217,7 +8217,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x4F, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_zero_page();
-        assert_eq!(0x51, cpu.memory.borrow().read(0x4F));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0x4F));
     }
 
     #[test]
@@ -8259,7 +8259,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x4F + 0x25, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_zero_page_x();
-        assert_eq!(0x51, cpu.memory.borrow().read(0x4F + 0x25));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0x4F + 0x25));
     }
 
     #[test]
@@ -8301,7 +8301,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x124F, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_absolute();
-        assert_eq!(0x51, cpu.memory.borrow().read(0x124F));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0x124F));
     }
 
     #[test]
@@ -8345,7 +8345,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x124F + 0x71, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_absolute_x();
-        assert_eq!(0x51, cpu.memory.borrow().read(0x124F + 0x71));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0x124F + 0x71));
     }
 
     #[test]
@@ -8389,7 +8389,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x124F + 0x71, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_absolute_y();
-        assert_eq!(0x51, cpu.memory.borrow().read(0x124F + 0x71));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0x124F + 0x71));
     }
 
     #[test]
@@ -8437,7 +8437,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0xB2A1, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_indirect_x();
-        assert_eq!(0x51, cpu.memory.borrow().read(0xB2A1));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0xB2A1));
     }
 
     #[test]
@@ -8486,7 +8486,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0xB2A1 + 0x30, 0x50);
 
         cpu.unofficial_increment_memory_subtract_acc_indirect_y();
-        assert_eq!(0x51, cpu.memory.borrow().read(0xB2A1 + 0x30));
+        assert_eq!(0x51, cpu.memory.borrow_mut().read(0xB2A1 + 0x30));
     }
 
     #[test]
@@ -8529,7 +8529,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F, 0x5A);
         cpu.unofficial_shift_left_memory_inclusive_or_acc_zero_page();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x4F));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x4F));
     }
 
     #[test]
@@ -8559,7 +8559,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
         cpu.unofficial_shift_left_memory_inclusive_or_acc_zero_page_x();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x4F + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x4F + 0x13));
     }
 
     #[test]
@@ -8590,7 +8590,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F, 0x5A);
         cpu.unofficial_shift_left_memory_inclusive_or_acc_absolute();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x431F));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x431F));
     }
 
     #[test]
@@ -8622,7 +8622,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_shift_left_memory_inclusive_or_acc_absolute_x();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -8654,7 +8654,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_shift_left_memory_inclusive_or_acc_absolute_y();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -8689,7 +8689,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02, 0x5A);
 
         cpu.unofficial_shift_left_memory_inclusive_or_acc_indirect_x();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x0A02));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x0A02));
     }
 
     #[test]
@@ -8727,7 +8727,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
         cpu.unofficial_shift_left_memory_inclusive_or_acc_indirect_y();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x0A02 + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x0A02 + 0x13));
     }
 
     #[test]
@@ -8760,7 +8760,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F, 0x5A);
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_zero_page();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x4F));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x4F));
     }
 
     #[test]
@@ -8790,7 +8790,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_zero_page_x();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x4F + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x4F + 0x13));
     }
 
     #[test]
@@ -8821,7 +8821,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F, 0x5A);
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_absolute();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x431F));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x431F));
     }
 
     #[test]
@@ -8853,7 +8853,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_absolute_x();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -8885,7 +8885,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_absolute_y();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -8920,7 +8920,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02, 0x5A);
 
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_indirect_x();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x0A02));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x0A02));
     }
 
     #[test]
@@ -8958,7 +8958,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
         cpu.unofficial_rotate_left_memory_bitwise_and_acc_indirect_y();
-        assert_eq!(0xB4, cpu.memory.borrow().read(0x0A02 + 0x13));
+        assert_eq!(0xB4, cpu.memory.borrow_mut().read(0x0A02 + 0x13));
     }
 
     #[test]
@@ -8991,7 +8991,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F, 0x5A);
         cpu.unofficial_shift_right_memory_xor_acc_zero_page();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x4F));
     }
 
     #[test]
@@ -9021,7 +9021,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
         cpu.unofficial_shift_right_memory_xor_acc_zero_page_x();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x4F + 0x13));
     }
 
     #[test]
@@ -9052,7 +9052,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F, 0x5A);
         cpu.unofficial_shift_right_memory_xor_acc_absolute();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x431F));
     }
 
     #[test]
@@ -9084,7 +9084,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_shift_right_memory_xor_acc_absolute_x();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -9116,7 +9116,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_shift_right_memory_xor_acc_absolute_y();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -9151,7 +9151,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02, 0x5A);
 
         cpu.unofficial_shift_right_memory_xor_acc_indirect_x();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x0A02));
     }
 
     #[test]
@@ -9189,7 +9189,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
         cpu.unofficial_shift_right_memory_xor_acc_indirect_y();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02 + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x0A02 + 0x13));
     }
 
     #[test]
@@ -9222,7 +9222,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F, 0x5A);
         cpu.unofficial_rotate_right_memory_add_acc_zero_page();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x4F));
     }
 
     #[test]
@@ -9252,7 +9252,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x234, 0x4F);
         cpu.memory.borrow_mut().write(0x4F + 0x13, 0x5A);
         cpu.unofficial_rotate_right_memory_add_acc_zero_page_x();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x4F + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x4F + 0x13));
     }
 
     #[test]
@@ -9283,7 +9283,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F, 0x5A);
         cpu.unofficial_rotate_right_memory_add_acc_absolute();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x431F));
     }
 
     #[test]
@@ -9315,7 +9315,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_rotate_right_memory_add_acc_absolute_x();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -9347,7 +9347,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x235, 0x43);
         cpu.memory.borrow_mut().write(0x431F + 0x13, 0x5A);
         cpu.unofficial_rotate_right_memory_add_acc_absolute_y();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x431F + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x431F + 0x13));
     }
 
     #[test]
@@ -9382,7 +9382,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02, 0x5A);
 
         cpu.unofficial_rotate_right_memory_add_acc_indirect_x();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x0A02));
     }
 
     #[test]
@@ -9419,7 +9419,7 @@ mod tests {
         cpu.memory.borrow_mut().write(0x0A02 + 0x13, 0x5A);
 
         cpu.unofficial_rotate_right_memory_add_acc_indirect_y();
-        assert_eq!(0x2D, cpu.memory.borrow().read(0x0A02 + 0x13));
+        assert_eq!(0x2D, cpu.memory.borrow_mut().read(0x0A02 + 0x13));
     }
 
     #[test]
