@@ -44,6 +44,7 @@ impl Ram {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use memory::*;
 
     fn create_test_memory() -> Ram {
         Ram::new()

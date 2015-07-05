@@ -2093,8 +2093,31 @@ mod tests {
     use std::rc::Rc;
     use std::cell::RefCell;
 
+    // 64 kilobytes of memory, no mapped addresses
+    struct MockMemory {
+        ram: Vec<u8>
+    }
+
+    impl MockMemory {
+        fn new() -> MockMemory {
+            MockMemory {
+                ram: vec![0;0xFFFF + 1],
+            }
+        }
+    }
+
+    impl Memory for MockMemory {
+        fn read(&self, address: u16) -> u8 {
+            self.ram[address as usize]
+        }
+
+        fn write(&mut self, address: u16, value: u8) {
+            self.ram[address as usize] = value;
+        }
+    }
+
     fn create_test_cpu() -> Cpu {
-        let memory = Rc::new(RefCell::new(Memory::new()));
+        let memory = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
         Cpu::new(&TvSystem::NTSC, memory)
     }
 
