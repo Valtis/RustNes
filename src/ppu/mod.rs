@@ -1,13 +1,16 @@
+mod vram;
 
 use memory::Memory;
+use self::vram::Vram;
 
 use std::fmt;
 pub struct Ppu {
     object_attribute_memory: Vec<u8>,
-    memory: Vec<u8>,
+    vram: Box<Memory>,
     registers: Registers,
     address_latch: bool,
     vram_address: u16,
+    vram_read_buffer: u8,
 }
 
 
@@ -20,31 +23,31 @@ impl fmt::Debug for Ppu {
 }
 
 impl Memory for Ppu {
-    fn read(&mut self, address: u16) -> u8 {
-        match address & 0x0007 {
-            0 => panic!("Attempting to read from write-only ppu control register (address 0x{:04X})", address),
-            1 => panic!("Attempting to read from write-only ppu mask register (address 0x{:04X})", address),
+    fn read(&mut self, cpu_address: u16) -> u8 {
+        match cpu_address & 0x0007 {
+            0 => panic!("Attempting to read from write-only ppu control register (address 0x{:04X})", cpu_address),
+            1 => panic!("Attempting to read from write-only ppu mask register (address 0x{:04X})", cpu_address),
             2 => self.status_register_read(),
-            3 => panic!("Attempting to read from write-only ppu oam address register (address 0x{:04X})", address),
-            4 => self.registers.oam_data,
-            5 => panic!("Attempting to read from write-only ppu scroll register (address 0x{:04X})", address),
-            6 => panic!("Attempting to read from write-only ppu address register (address 0x{:04X})", address),
+            3 => panic!("Attempting to read from write-only ppu oam address register (address 0x{:04X})", cpu_address),
+            4 => self.oam_data_register_read(),
+            5 => panic!("Attempting to read from write-only ppu scroll register (address 0x{:04X})", cpu_address),
+            6 => panic!("Attempting to read from write-only ppu address register (address 0x{:04X})", cpu_address),
             7 => self.ppu_data_register_read(),
-            _ => panic!("Something went horribly wrong in modulus calculation in ppu.read (address: {})", address),
+            _ => panic!("Something went horribly wrong in modulus calculation in ppu.read (address: {})", cpu_address),
         }
     }
 
-    fn write(&mut self, address: u16, value: u8) {
-        match address & 0x0007 {
+    fn write(&mut self, cpu_address: u16, value: u8) {
+        match cpu_address & 0x0007 {
             0 => self.registers.control = value,
             1 => self.registers.mask = value,
-            2 => panic!("Attempting to write to read-only ppu status register (address 0x{:04X})", address),
+            2 => panic!("Attempting to write to read-only ppu status register (address 0x{:04X})", cpu_address),
             3 => self.registers.oam_address = value,
             4 => self.oam_data_register_write(value),
             5 => self.scroll_register_write(value),
             6 => self.ppu_address_register_write(value),
             7 => self.ppu_data_register_write(value),
-            _ => panic!("Something went horribly wrong in modulus calculation in ppu.write (address: {})", address),
+            _ => panic!("Something went horribly wrong in modulus calculation in ppu.write (address: {})", cpu_address),
         }
     }
 }
@@ -53,10 +56,11 @@ impl Ppu {
     pub fn new() -> Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
-            memory: vec![0;0x800], // 2kb of internam memory
+            vram: Box::new(Vram::new()),
             registers: Registers::new(),
             address_latch: false,
             vram_address: 0,
+            vram_read_buffer: 0,
         }
     }
 
@@ -75,9 +79,15 @@ impl Ppu {
         val
     }
 
+    fn oam_data_register_read(&mut self) -> u8 {
+        let address = self.registers.oam_address as usize;
+        self.object_attribute_memory[address]
+    }
+
     fn oam_data_register_write(&mut self, value: u8) {
-        self.registers.oam_data = value;
+        let address = self.registers.oam_address as usize;
         self.registers.oam_address += 1;
+        self.object_attribute_memory[address] = value;
     }
 
     fn scroll_register_write(&mut self, value: u8) {
@@ -86,18 +96,33 @@ impl Ppu {
     }
 
     fn ppu_address_register_write(&mut self, value: u8) {
+        if self.address_latch {
+            self.vram_address = self.vram_address & 0xFF00 | value as u16;
+        } else {
+            self.vram_address = self.vram_address & 0x00FF | ((value as u16) << 8);
+        }
         self.address_latch = !self.address_latch;
-        self.registers.ppu_address = value;
     }
 
     fn ppu_data_register_read(&mut self) -> u8 {
+        let address = self.vram_address;
         self.increment_vram();
-        self.registers.ppu_data
+
+        if address <= 0x3EFF {
+            let buffer = self.vram_read_buffer;
+            self.vram_read_buffer = self.vram.read(address);
+            return buffer
+        } else {
+            panic!("Implement nametable mirroring etc");
+            // TODO: Return value at address instead of read buffer
+            // update buffer to mirror of the address
+        }
     }
 
     fn ppu_data_register_write(&mut self, value: u8) {
-        self.registers.ppu_data = value;
+        let address = self.vram_address;
         self.increment_vram();
+        self.vram.write(address, value);
     }
 
 
@@ -109,11 +134,8 @@ struct Registers {
     mask: u8,
     status: u8,
     oam_address: u8,
-    oam_data: u8,
     oam_dma: u8,
     scroll: u8,
-    ppu_address: u8,
-    ppu_data: u8,
 }
 
 impl Registers {
@@ -123,11 +145,8 @@ impl Registers {
             mask: 0,
             status: 0,
             oam_address: 0,
-            oam_data: 0,
             oam_dma: 0,
             scroll: 0,
-            ppu_address: 0,
-            ppu_data: 0,
         }
     }
 }
@@ -137,8 +156,33 @@ mod tests {
     use super::*;
     use memory::Memory;
 
+    struct MockMemory {
+        memory: Vec<u8>
+    }
+
+    impl MockMemory {
+        fn new() -> MockMemory {
+            MockMemory {
+                memory: vec![0;0xFFFF + 1],
+            }
+        }
+    }
+
+    impl Memory for MockMemory {
+        fn read(&mut self, address: u16) -> u8 {
+            self.memory[address as usize]
+        }
+
+        fn write(&mut self, address: u16, value: u8) {
+            self.memory[address as usize] = value;
+        }
+    }
+
     fn create_test_ppu() -> Ppu {
-        Ppu::new()
+        let mut ppu = Ppu::new();
+        // replace vram with mock
+        ppu.vram = Box::new(MockMemory::new());
+        ppu
     }
 
     #[test]
@@ -222,10 +266,11 @@ mod tests {
     }
 
     #[test]
-    fn write_to_0x2004_changes_oam_data_register() {
+    fn write_to_0x2004_changes_object_attribute_memory_at_oam_address() {
         let mut ppu = create_test_ppu();
+        ppu.registers.oam_address = 0xFE;
         ppu.write(0x2004, 0x13);
-        assert_eq!(0x13, ppu.registers.oam_data);
+        assert_eq!(0x13, ppu.object_attribute_memory[0xFE]);
     }
 
     #[test]
@@ -237,10 +282,11 @@ mod tests {
     }
 
     #[test]
-    fn read_from_0x2004_returns_oam_data_register_register() {
+    fn read_from_0x2004_returns_oam_value_at_address() {
         let mut ppu = create_test_ppu();
-        ppu.registers.oam_data = 0x42;
-        assert_eq!(0x42, ppu.read(0x2004));
+        ppu.registers.oam_address = 0x56;
+        ppu.object_attribute_memory[0x56] = 0x64;
+        assert_eq!(0x64, ppu.read(0x2004));
     }
 
     #[test]
@@ -274,13 +320,6 @@ mod tests {
     }
 
     #[test]
-    fn write_to_0x2006_changes_ppu_address_register() {
-        let mut ppu = create_test_ppu();
-        ppu.write(0x2006, 0x13);
-        assert_eq!(0x13, ppu.registers.ppu_address);
-    }
-
-    #[test]
     #[should_panic]
     fn read_from_0x2006_panics() {
         let mut ppu = create_test_ppu();
@@ -304,17 +343,47 @@ mod tests {
     }
 
     #[test]
-    fn write_to_0x2007_changes_ppu_data_register() {
+    fn write_to_0x2006_writes_high_byte_if_latch_is_unset() {
         let mut ppu = create_test_ppu();
-        ppu.write(0x2007, 0x13);
-        assert_eq!(0x13, ppu.registers.ppu_data);
+        ppu.address_latch = false;
+        ppu.vram_address = 0x1234;
+        ppu.write(0x2006, 0x13);
+        assert_eq!(0x1334, ppu.vram_address);
     }
 
     #[test]
-    fn read_from_0x2007_returns_ppu_data_register() {
+    fn write_to_0x2006_writes_low_byte_if_latch_is_set() {
         let mut ppu = create_test_ppu();
-        ppu.registers.ppu_data =  0x13;
-        assert_eq!(0x13, ppu.read(0x2007));
+        ppu.address_latch = true;
+        ppu.vram_address = 0x1234;
+        ppu.write(0x2006, 0x6F);
+        assert_eq!(0x126F, ppu.vram_address);
+    }
+
+    #[test]
+    fn write_to_0x2007_writes_to_memory_at_vram_address() {
+        let mut ppu = create_test_ppu();
+        ppu.vram_address = 0x3435;
+        ppu.write(0x2007, 0x13);
+        assert_eq!(0x13, ppu.vram.read(0x3435));
+    }
+
+    #[test]
+    fn read_from_0x2007_returns_vram_read_buffer_value_when_reading_below_0x3F00() {
+        let mut ppu = create_test_ppu();
+        ppu.vram_address = 0x3EFF;
+        ppu.vram_read_buffer = 0x124;
+        ppu.vram.write(0x3EFF, 0x200);
+        assert_eq!(0x124, ppu.read(0x2007));
+    }
+
+    #[test]
+    fn read_from_0x2007_updates_read_buffer_to_value_at_current_address_when_reading_below_0x3F00() {
+        let mut ppu = create_test_ppu();
+        ppu.vram_address = 0x3EFF;
+        ppu.vram_read_buffer = 0x124;
+        ppu.vram.write(0x3EFF, 0x200);
+        assert_eq!(0x124, ppu.vram_read_buffer);
     }
 
     #[test]
@@ -377,21 +446,25 @@ mod tests {
     #[test]
     fn read_from_address_between_0x2008_and_0x3FFF_is_mirrored_correctly() {
         let mut ppu = create_test_ppu();
-        ppu.registers.oam_data = 0xF2;
+        ppu.object_attribute_memory[0xA9] = 0xF2;
+        ppu.registers.oam_address = 0xA9;
         assert_eq!(0xF2, ppu.read(0x3014));
     }
 
     #[test]
+    // write to data register -> write to vram at vram_address
     fn write_to_0x3FFF_writes_to_ppu_data_register() {
         let mut ppu = create_test_ppu();
+        ppu.vram_address = 0x1234;
         ppu.write(0x3FFF, 0x13);
-        assert_eq!(0x13, ppu.registers.ppu_data);
+        assert_eq!(0x13, ppu.vram.read(0x1234));
     }
 
     #[test]
-    fn read_from_address_0x3FFF_returns_ppu_data_register_register() {
+    fn read_from_0x3FFF_reads_from_ppu_data_register() {
         let mut ppu = create_test_ppu();
-        ppu.registers.ppu_data = 0xF2;
+        ppu.vram_read_buffer = 0xF2;
+        ppu.vram_address = 0x1234;
         assert_eq!(0xF2, ppu.read(0x3FFF));
     }
 }
