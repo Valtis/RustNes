@@ -7,6 +7,6 @@ mod ram;
 mod rom;
 
 fn main() {
-    let mut console = console::Console::new("donkey.nes");
+    let mut console = console::Console::new("nestest.nes");
     console.execute();
 }

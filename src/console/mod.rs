@@ -19,7 +19,7 @@ pub struct Console{
 impl Console {
     pub fn new (rom_path: &str) -> Console {
 
-        let rom = read_rom(rom_path);
+        let rom = Box::new(read_rom(rom_path));
         let tv_system = rom.header.tv_system.clone();
         let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom)) as Box<Memory>));
         Console {
@@ -49,6 +49,7 @@ impl Console {
         //let mut ppu_fractional_cycles = 0.0;
         self.cpu.reset();
 
+        self.cpu.program_counter = 0xC000;
         println!("\nPC: {}\n", self.cpu.program_counter);
 
         let mut time = time::precise_time_ns();

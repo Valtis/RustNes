@@ -1,6 +1,7 @@
 // see http://wiki.nesdev.com/w/index.php/INES for more information
 use std::fs::File;
 use std::io::Read;
+use memory::Memory;
 
 pub fn read_rom(file_path: &str) -> Rom {
 
@@ -15,9 +16,11 @@ pub fn read_rom(file_path: &str) -> Rom {
     rom.read_trainer_field(&mut rom_file);
     rom.read_prg_rom(&mut rom_file);
     rom.read_chr_rom(&mut rom_file);
-
-    println!("");
-    println!("{:?}", rom.header);
+    // mappers are currently unimplemented; mapper 0 is hardcoded
+    // thus, panic if other mappers are used
+    if rom.header.mapper != 0 {
+        panic!("Currently only mapper 0 is implemented (rom uses mapper {})", rom.header.mapper);
+    }
     rom
 }
 
@@ -42,10 +45,45 @@ fn read_bytes_from_file_or_panic(length:u64, file: &mut File, err_msg: &str) -> 
 #[derive(Debug)]
 pub struct Rom {
     pub header: RomHeader,
-    pub trainer: Vec<u8>, // length is 0 if no trainer is present
-    pub prg_rom_data: Vec<u8>,
-    pub chr_rom_data: Vec<u8>,
+    trainer: Vec<u8>, // length is 0 if no trainer is present
+    prg_rom_data: Vec<u8>,
+    chr_rom_data: Vec<u8>,
 }
+
+
+
+// this is an inefficient implementation, requiring address calculations on each read\write
+fn get_offset_temp_hardcore_impl(length: u8, address: u16) -> usize {
+
+    // program rom is mapped to memory addresses 0x8000 - 0xBFFF and 0xC000 - 0xFFFF
+    // if rom size is 16kb, 0x8000 - 0xBFFF and 0xC000 - 0xFFFF are mirrored
+    // otherwise first 16kb of rom is mapped to 0x8000 -> and second 16kb is mapped to C0000 ->
+
+    let base = address & 0x3FFF; // mask first two bits away to get offset
+    if length > 1 && (address & 0xC000 == 0xC000) {
+        (base + 0x4000) as usize // if rom size is not 16kb and address is 0xC000 ->, map to second 16kb
+    } else {
+        base as usize
+    }
+}
+
+impl Memory for Rom {
+
+    fn read(&self, address: u16) -> u8 {
+        // TODO: Implement mappers & let them handle this
+        // for now, mapper 0 is hardcoded (poorly)
+
+        let offset = get_offset_temp_hardcore_impl(self.header.prg_rom_size, address);
+        self.prg_rom_data[offset]
+    }
+
+    fn write(&mut self, address: u16, value: u8) {
+        // TODO: Implement mappers & let them handle this (memory mapped io for mapper registers)
+        // for now, panic on write attempts
+        panic!("Writes are unimplemented for roms");
+    }
+}
+
 
 
 impl Rom {
