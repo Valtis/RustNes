@@ -93,7 +93,7 @@ impl Rom {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TvSystem {
     Uninitialized,
     PAL,

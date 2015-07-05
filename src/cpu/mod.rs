@@ -16,7 +16,7 @@ use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct Cpu {
-    memory: Rc<RefCell<Memory>>, // reference to memory, so that cpu can use it
+    memory: Rc<RefCell<Box<Memory>>>, // reference to memory, so that cpu can use it
     pub frequency: Frequency,
     pub program_counter:u16,
     pub stack_pointer:u8,
@@ -28,7 +28,7 @@ pub struct Cpu {
 }
 
 impl Cpu {
-    pub fn new(tv_system: &TvSystem, memory: Rc<RefCell<Memory>>) -> Cpu {
+    pub fn new(tv_system: &TvSystem, memory: Rc<RefCell<Box<Memory>>>) -> Cpu {
         Cpu {
             memory: memory,
             frequency: Frequency::new(&tv_system),
@@ -49,7 +49,14 @@ impl Cpu {
 
 
     pub fn execute_instruction(&mut self) {
-
+        println!("{:04X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
+            self.program_counter,
+            self.a,
+            self.x,
+            self.y,
+            self.status_flags & 0xEF,
+            self.stack_pointer
+            );
         let instruction = self.memory.borrow_mut().read(self.program_counter);
 
         self.program_counter += 1;
