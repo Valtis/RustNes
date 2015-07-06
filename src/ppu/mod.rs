@@ -127,6 +127,16 @@ impl Ppu {
         self.vram.write(address, value);
     }
 
+    pub fn oam_dma_write(&mut self, data: Vec<u8>) {
+        if data.len() != 256 {
+            panic!("Invalid oam data write length: 256 expected but was {}", data.len());
+        }
+        self.object_attribute_memory = data;
+    }
+
+
+    pub fn execute_cycle(&mut self) {
+    }
 
 }
 
@@ -489,5 +499,24 @@ mod tests {
         ppu.vram_read_buffer = 0xF2;
         ppu.vram_address = 0x1234;
         assert_eq!(0xF2, ppu.read(0x3FFF));
+    }
+
+    #[test]
+    #[should_panic]
+    fn oam_dma_write_panics_if_data_length_is_not_256_bytes() {
+        let data:Vec<u8> = vec![1, 2, 3, 4, 5];
+        let mut ppu = create_test_ppu();
+        ppu.oam_dma_write(data);
+    }
+
+    #[test]
+    fn oam_dma_write_replaces_oam() {
+        let mut ppu = create_test_ppu();
+        let mut data = vec![];
+        for i in 0..256 {
+            data.push(((i as u16) % 256) as u8);
+        }
+        ppu.oam_dma_write(data.clone());
+        assert_eq!(data, ppu.object_attribute_memory);
     }
 }

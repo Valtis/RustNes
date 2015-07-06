@@ -1,9 +1,13 @@
 use memory::*;
 use ram::*;
+use ppu::*;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct MemoryBus {
     rom: Box<Memory>,
     ram: Box<Memory>,
+    ppu: Rc<RefCell<Ppu>>,
     // TODO: APU, controllers
 }
 
@@ -11,10 +15,11 @@ impl Memory for MemoryBus {
     fn read(&mut self, address: u16) -> u8 {
         if address < 0x2000 {
             self.ram.read(address)
+        } else if (address >= 0x2000 && address <= 0x3FFF) || address == 0x4014 {
+            self.ppu.borrow_mut().read(address)
         } else if address >= 0x4020 {
             self.rom.read(address)
-        }
-        else {
+        } else {
             0
         }
     }
@@ -22,7 +27,18 @@ impl Memory for MemoryBus {
     fn write(&mut self, address: u16, value: u8) {
         if address < 0x2000 {
             self.ram.write(address, value);
-        } else if address >= 0x4020 {
+        } else if (address >= 0x2000 && address <= 0x3FFF) || address == 0x4014 {
+            self.ppu.borrow_mut().write(address, value);
+        } else if address == 0x4014 { // OAM DMA
+            let start = (value as u16) << 8;
+            let mut data = vec![];
+            for i in start..(start + 0xFF) {
+                data.push(self.read(i));
+            }
+
+            self.ppu.borrow_mut().oam_dma_write(data);
+        }
+        else if address >= 0x4020 {
             self.rom.write(address, value);
         }
     }
@@ -30,10 +46,11 @@ impl Memory for MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(rom: Box<Memory>) -> MemoryBus  {
+    pub fn new(rom: Box<Memory>, ppu: Rc<RefCell<Ppu>>) -> MemoryBus  {
         MemoryBus {
             rom: rom,
             ram: Box::new(Ram::new()) as Box<Memory>,
+            ppu: ppu,
         }
     }
 }
@@ -43,8 +60,13 @@ impl MemoryBus {
 mod tests {
     use super::*;
     use memory::*;
-
+    use ppu::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     // 64 kilobytes of memory, no mapped addresses
+
+    // TODO: Figure out how to cleanly unit test PPU read\writes
+
     struct MockMemory {
         memory: Vec<u8>
     }
@@ -66,6 +88,7 @@ mod tests {
             self.memory[address as usize] = value;
         }
     }
+
     // few helpers
     impl MemoryBus {
         fn assert_value_present_in_ram_only(&mut self, address: u16, value: u8) {
@@ -83,6 +106,7 @@ mod tests {
         MemoryBus {
             rom: Box::new(MockMemory::new()),
             ram: Box::new(MockMemory::new()),
+            ppu: Rc::new(RefCell::new(Ppu::new())),
         }
     }
 
@@ -170,5 +194,4 @@ mod tests {
         mem_bus.rom.write(0xFFFF, 0x4B);
         assert_eq!(0x4B, mem_bus.read(0xFFFF));
     }
-
 }

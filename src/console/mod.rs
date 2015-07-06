@@ -12,20 +12,21 @@ use std::cell::RefCell;
 #[derive(Debug)]
 pub struct Console{
     cpu: Cpu,
-    ppu: Ppu,
     memory: Rc<RefCell<Box<Memory>>>,
+    ppu: Rc<RefCell<Ppu>>,
 }
 
 impl Console {
     pub fn new (rom_path: &str) -> Console {
 
+        let ppu = Rc::new(RefCell::new(Ppu::new()));
         let rom = Box::new(read_rom(rom_path));
         let tv_system = rom.header.tv_system.clone();
-        let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom)) as Box<Memory>));
+        let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom, ppu.clone())) as Box<Memory>));
         Console {
             memory: mem.clone(),
             cpu: Cpu::new(&tv_system, mem.clone()),
-            ppu: Ppu::new()
+            ppu: ppu.clone(),
         }
     }
 
@@ -76,7 +77,7 @@ impl Console {
 
         // emulate PPU cycles
         for _ in 0..3 {
-
+            self.ppu.borrow_mut().execute_cycle();
         }
     }
 
