@@ -1,16 +1,16 @@
 use memory::Memory;
-use rom::ArrangementMirroring;
+use rom::Mirroring;
 
 pub struct Vram {
     memory: Vec<u8>,
-    mirroring: ArrangementMirroring,
+    mirroring: Mirroring,
 }
 
 impl Vram {
     pub fn new() -> Vram {
         Vram {
             memory: vec![0;0x0800],
-            mirroring: ArrangementMirroring::VArrangementHMirroring, // temporary hardcoding
+            mirroring: Mirroring::HorizontalMirroring, // temporary hardcoding
         }
     }
 }

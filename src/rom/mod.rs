@@ -138,11 +138,11 @@ pub enum TvSystem {
     NTSC
 }
 
-#[derive(Debug)]
-pub enum ArrangementMirroring {
+#[derive(Debug, Clone)]
+pub enum Mirroring {
     Uninitialized,
-    VArrangementHMirroring,
-    HArrangementVMirroring,
+    HorizontalMirroring,
+    VerticalMirroring,
     FourScreenVRAM
 }
 
@@ -153,7 +153,7 @@ pub struct RomHeader {
     pub chr_rom_size:u8, // size in 8kb units - if 0, chr ram is used
     pub prg_ram_size:u8, // size in 8kb units - if 0, 8kb of ram is assumed
     pub mapper: u8,
-    arrangement_mirroring: ArrangementMirroring,
+    pub arrangement_mirroring: Mirroring,
     pub tv_system: TvSystem,
     has_trainer: bool,
     has_battery_backing: bool,
@@ -167,7 +167,7 @@ impl RomHeader {
             chr_rom_size:0,
             prg_ram_size:0,
             mapper: 0,
-            arrangement_mirroring: ArrangementMirroring::Uninitialized,
+            arrangement_mirroring: Mirroring::Uninitialized,
             tv_system: TvSystem::Uninitialized,
             has_trainer: false,
             has_battery_backing: false,
@@ -221,12 +221,12 @@ impl RomHeader {
 
         // if bit 3 is set, bit 0 is ignored
         if (buf[0] & (1 << 3)) != 0 {
-            self.arrangement_mirroring = ArrangementMirroring::FourScreenVRAM;
+            self.arrangement_mirroring = Mirroring::FourScreenVRAM;
         } else { // otherwise, read bit 0
             if (buf[0] & 1) == 0 {
-                self.arrangement_mirroring = ArrangementMirroring::VArrangementHMirroring;
+                self.arrangement_mirroring = Mirroring::HorizontalMirroring;
             } else {
-                self.arrangement_mirroring = ArrangementMirroring::HArrangementVMirroring;
+                self.arrangement_mirroring = Mirroring::VerticalMirroring;
             }
         }
 

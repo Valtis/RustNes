@@ -17,7 +17,7 @@ pub struct Ppu {
 
 impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.registers);
+        try!(write!(f, "{:?}", self.registers));
         write!(f, "<Memory contents not included>")
     }
 }
@@ -109,13 +109,15 @@ impl Ppu {
         self.increment_vram();
 
         if address <= 0x3EFF {
+            // read is buffered; return value in buffer and update buffer to value at address
             let buffer = self.vram_read_buffer;
             self.vram_read_buffer = self.vram.read(address);
-            return buffer
+            buffer
         } else {
-            panic!("Implement nametable mirroring etc");
-            // TODO: Return value at address instead of read buffer
-            // update buffer to mirror of the address
+            // read is not buffered; update buffer to value at address - 0x1000
+            let value = self.vram.read(address);
+            self.vram_read_buffer = self.vram.read(address - 0x1000);
+            value
         }
     }
 
@@ -372,18 +374,39 @@ mod tests {
     fn read_from_0x2007_returns_vram_read_buffer_value_when_reading_below_0x3F00() {
         let mut ppu = create_test_ppu();
         ppu.vram_address = 0x3EFF;
-        ppu.vram_read_buffer = 0x124;
-        ppu.vram.write(0x3EFF, 0x200);
-        assert_eq!(0x124, ppu.read(0x2007));
+        ppu.vram_read_buffer = 0xA4;
+        ppu.vram.write(0x3EFF, 0x23);
+        assert_eq!(0xA4, ppu.read(0x2007));
     }
 
     #[test]
     fn read_from_0x2007_updates_read_buffer_to_value_at_current_address_when_reading_below_0x3F00() {
         let mut ppu = create_test_ppu();
         ppu.vram_address = 0x3EFF;
-        ppu.vram_read_buffer = 0x124;
-        ppu.vram.write(0x3EFF, 0x200);
-        assert_eq!(0x124, ppu.vram_read_buffer);
+        ppu.vram_read_buffer = 0xA4;
+        ppu.vram.write(0x3EFF, 0xB9);
+        ppu.read(0x2007);
+        assert_eq!(0xB9, ppu.vram_read_buffer);
+    }
+
+    #[test]
+    fn read_from_0x2007_returns_data_straight_from_vram_skipping_read_buffer_when_reading_at_or_above_0x3F00() {
+        let mut ppu = create_test_ppu();
+        ppu.vram_address = 0x3F00;
+        ppu.vram_read_buffer = 0xE1;
+        ppu.vram.write(0x3F00, 0xBE);
+        assert_eq!(0xBE, ppu.read(0x2007));
+    }
+
+    #[test]
+    fn read_from_0x2007_sets_read_buffer_to_nametable_value_at_0x1000_before_address() {
+        let mut ppu = create_test_ppu();
+        ppu.vram_address = 0x3F00;
+        ppu.vram_read_buffer = 0x14;
+        ppu.vram.write(0x3F00, 0x200);
+        ppu.vram.write(0x2F00, 0xB1);
+        ppu.read(0x2007);
+        assert_eq!(0xB1, ppu.vram_read_buffer);
     }
 
     #[test]

@@ -31,7 +31,6 @@ impl Console {
 
 
     pub fn execute(&mut self) {
-        let mut avg_cycle = 0.0;
         let cpu_cycle_time_in_nanoseconds = (1.0/(self.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
         println!("CPU frequency: {}", self.cpu.frequency.cpu_clock_frequency);
         println!("Cycle time in nanoseconds: {}", cpu_cycle_time_in_nanoseconds);
@@ -49,7 +48,6 @@ impl Console {
         //let mut ppu_fractional_cycles = 0.0;
         self.cpu.reset();
 
-        self.cpu.program_counter = 0xC000;
         println!("\nPC: {}\n", self.cpu.program_counter);
 
         let mut time = time::precise_time_ns();
@@ -59,7 +57,6 @@ impl Console {
 
 
             if time_taken > cpu_cycle_time_in_nanoseconds * cpu_cycles_per_tick {
-                avg_cycle += time_taken as f64;
                 for _ in 0..cpu_cycles_per_tick {
                     self.run_emulation_tick();
                 }
@@ -67,9 +64,6 @@ impl Console {
             }
 
         }
-
-//        println!("Avg cycle length: {}", avg_cycle/cycles as f64);
-    //    println!("Duration: {}", avg_cycle as f64/ 1000_000_000.0)
     }
 
     fn run_emulation_tick(&mut self) {
@@ -81,7 +75,7 @@ impl Console {
         }
 
         // emulate PPU cycles
-        for i in 0..3 {
+        for _ in 0..3 {
 
         }
     }

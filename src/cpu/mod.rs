@@ -49,15 +49,17 @@ impl Cpu {
 
 
     pub fn execute_instruction(&mut self) {
-        println!("{:04X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
+        let instruction = self.memory.borrow_mut().read(self.program_counter);
+
+        println!("{:04X} Opcode:{:02X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
             self.program_counter,
+            instruction,
             self.a,
             self.x,
             self.y,
             self.status_flags & 0xEF,
-            self.stack_pointer
+            self.stack_pointer,
             );
-        let instruction = self.memory.borrow_mut().read(self.program_counter);
 
         self.program_counter += 1;
         match instruction {
@@ -585,7 +587,7 @@ impl Cpu {
     }
 
     fn do_add(&mut self, operand: u8) {
-        let mut result = self.a as u16 + operand as u16 + (self.status_flags & 0x01) as u16;
+        let result = self.a as u16 + operand as u16 + (self.status_flags & 0x01) as u16;
 
         // clear carry, negative, overflow and zero flags
         self.status_flags = self.status_flags & 0x3C;
@@ -872,7 +874,7 @@ impl Cpu {
         let low_byte = self.pop_value_from_stack() as u16;
         let high_byte = self.pop_value_from_stack() as u16;
 
-        self.program_counter = ((high_byte << 8) | low_byte);
+        self.program_counter = (high_byte << 8) | low_byte;
         self.status_flags = flags & 0xCF | (self.status_flags & 0x30); // flags 4 & 5 are ignored
     }
 

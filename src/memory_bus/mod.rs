@@ -1,5 +1,4 @@
 use memory::*;
-use rom::*;
 use ram::*;
 
 pub struct MemoryBus {
