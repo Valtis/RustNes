@@ -27,7 +27,7 @@ impl Memory for MemoryBus {
     fn write(&mut self, address: u16, value: u8) {
         if address < 0x2000 {
             self.ram.write(address, value);
-        } else if (address >= 0x2000 && address <= 0x3FFF) || address == 0x4014 {
+        } else if address >= 0x2000 && address <= 0x3FFF{
             self.ppu.borrow_mut().write(address, value);
         } else if address == 0x4014 { // OAM DMA
             let start = (value as u16) << 8;
