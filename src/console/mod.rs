@@ -18,10 +18,10 @@ pub struct Console{
 
 impl Console {
     pub fn new (rom_path: &str) -> Console {
-
-        let ppu = Rc::new(RefCell::new(Ppu::new()));
         let rom = Box::new(read_rom(rom_path));
         let tv_system = rom.header.tv_system.clone();
+        let ppu = Rc::new(RefCell::new(Ppu::new(&tv_system)));
+
         let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom, ppu.clone())) as Box<Memory>));
         Console {
             memory: mem.clone(),
@@ -72,13 +72,18 @@ impl Console {
         if self.cpu.wait_counter > 0 {
             self.cpu.wait_counter -= 1;
         } else {
-            self.cpu.execute_instruction();
-        }
 
-        // emulate PPU cycles
-        for _ in 0..3 {
-            self.ppu.borrow_mut().execute_cycle();
+            // check for nmi from ppu
+            if self.ppu.borrow_mut().nmi_occured() {
+                self.cpu.handle_nmi();
+                return;
+            } else {
+                self.cpu.execute_instruction();
+            }
         }
+        // emulate PPU cycles. Executes 3 cycles (NTSC) or average 3.2 cycles (PAL) per cpu cycle.
+        // PAL executes 3 cycles with an additional cycle every few cpu cycles to remain in sync
+        self.ppu.borrow_mut().execute_cycles();
     }
 
 }

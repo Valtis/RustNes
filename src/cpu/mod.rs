@@ -47,6 +47,20 @@ impl Cpu {
         self.jump_absolute();
     }
 
+    pub fn handle_nmi(&mut self) {
+        let return_address = self.program_counter;
+        self.push_value_into_stack(((return_address & 0xFF00) >> 8) as u8);
+        self.push_value_into_stack((return_address & 0xFF) as u8);
+
+        let flags = (self.status_flags & 0xEF) | 0x20; // bit 5 must be set and 4 must be clear
+        self.push_value_into_stack(flags);
+        // disable interrupts
+        self.status_flags = self.status_flags | 0x04;
+        self.program_counter = 0xFFFA;
+        self.jump_absolute();
+        self.wait_counter = 7;
+    }
+
 
     pub fn execute_instruction(&mut self) {
         let instruction = self.memory.borrow_mut().read(self.program_counter);
@@ -861,6 +875,8 @@ impl Cpu {
 
         let flags = self.status_flags | 0x30; // bit 5 and 4 must be set
         self.push_value_into_stack(flags);
+        // disable interrupts
+        self.status_flags = self.status_flags | 0x04;
         self.program_counter = 0xFFFE;
 
         self.jump_absolute();
@@ -4799,12 +4815,12 @@ mod tests {
     }
 
     #[test]
-    fn force_interrupt_does_not_modify_status_flags() {
+    fn force_interrupt_sets_interrupt_disable_flag() {
         let mut cpu = create_test_cpu();
         cpu.stack_pointer = 0x80;
         cpu.status_flags = 0x0A;
         cpu.force_interrupt();
-        assert_eq!(0x0A, cpu.status_flags);
+        assert_eq!(0x0E, cpu.status_flags);
     }
 
     #[test]
@@ -9491,6 +9507,52 @@ mod tests {
         cpu.program_counter = 0x13;
         cpu.unofficial_triple_no_operation_page_penalty(3);
         assert_eq!(0x15, cpu.program_counter);
+    }
+
+
+    #[test]
+    fn nmi_handler_pushes_status_flags_with_bit_4_unset_and_bit_5_set() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0xDA;
+        cpu.handle_nmi();
+        assert_eq!(0xEA, cpu.pop_value_from_stack());
+    }
+
+    #[test]
+    fn nmi_handler_pushes_old_program_counter_into_stack() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x0FAE;
+        cpu.handle_nmi();
+        cpu.pop_value_from_stack(); // pop flags
+        let mut address:u16 = cpu.pop_value_from_stack() as u16; // low byte
+        address = address | ((cpu.pop_value_from_stack() as u16) << 8); // high byete
+
+        assert_eq!(0x0FAE, address);
+    }
+
+    #[test]
+    fn nmi_handler_set_progam_counter_to_value_stored_at_nmi_vector() {
+        let mut cpu = create_test_cpu();
+        cpu.program_counter = 0x0FAE;
+        cpu.memory.borrow_mut().write(0xFFFA, 0xFE);
+        cpu.memory.borrow_mut().write(0xFFFB, 0xCA);
+        cpu.handle_nmi();
+        assert_eq!(0xCAFE, cpu.program_counter);
+    }
+
+    #[test]
+    fn nmi_handler_disables_interrupts() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0xDA;
+        cpu.handle_nmi();
+        assert_eq!(0xDE, cpu.status_flags);
+    }
+
+    #[test]
+    fn nmi_handler_takes_7_cycles() {
+        let mut cpu = create_test_cpu();
+        cpu.handle_nmi();
+        assert_eq!(7, cpu.wait_counter);
     }
 
 }

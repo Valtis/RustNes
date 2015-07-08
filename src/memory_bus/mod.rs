@@ -27,7 +27,7 @@ impl Memory for MemoryBus {
     fn write(&mut self, address: u16, value: u8) {
         if address < 0x2000 {
             self.ram.write(address, value);
-        } else if address >= 0x2000 && address <= 0x3FFF{
+        } else if address >= 0x2000 && address <= 0x3FFF {
             self.ppu.borrow_mut().write(address, value);
         } else if address == 0x4014 { // OAM DMA
             let start = (value as u16) << 8;
@@ -61,6 +61,7 @@ mod tests {
     use super::*;
     use memory::*;
     use ppu::*;
+    use rom::TvSystem;
     use std::cell::RefCell;
     use std::rc::Rc;
     // 64 kilobytes of memory, no mapped addresses
@@ -106,7 +107,7 @@ mod tests {
         MemoryBus {
             rom: Box::new(MockMemory::new()),
             ram: Box::new(MockMemory::new()),
-            ppu: Rc::new(RefCell::new(Ppu::new())),
+            ppu: Rc::new(RefCell::new(Ppu::new(&TvSystem::NTSC))),
         }
     }
 

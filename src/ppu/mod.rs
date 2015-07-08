@@ -1,9 +1,13 @@
 mod vram;
+mod tv_system_values;
 
 use memory::Memory;
+use rom::TvSystem;
 use self::vram::Vram;
+use self::tv_system_values::TvSystemValues;
 
 use std::fmt;
+
 pub struct Ppu {
     object_attribute_memory: Vec<u8>,
     vram: Box<Memory>,
@@ -11,6 +15,10 @@ pub struct Ppu {
     address_latch: bool,
     vram_address: u16,
     vram_read_buffer: u8,
+    tv_system: TvSystemValues,
+    current_scanline: u16,
+    pos_at_scanline: u16,
+    nmi_occured: bool,
 }
 
 
@@ -39,7 +47,7 @@ impl Memory for Ppu {
 
     fn write(&mut self, cpu_address: u16, value: u8) {
         match cpu_address & 0x0007 {
-            0 => self.registers.control = value,
+            0 => self.control_register_write(value),
             1 => self.registers.mask = value,
             2 => panic!("Attempting to write to read-only ppu status register (address 0x{:04X})", cpu_address),
             3 => self.registers.oam_address = value,
@@ -53,7 +61,7 @@ impl Memory for Ppu {
 }
 
 impl Ppu {
-    pub fn new() -> Ppu {
+    pub fn new(tv_system: &TvSystem) -> Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
             vram: Box::new(Vram::new()),
@@ -61,7 +69,23 @@ impl Ppu {
             address_latch: false,
             vram_address: 0,
             vram_read_buffer: 0,
+            tv_system: TvSystemValues::new(&tv_system),
+            current_scanline: 0,
+            pos_at_scanline: 0,
+            nmi_occured: false,
         }
+    }
+
+    fn generate_nmi_if_flags_set(&mut self) {
+        if self.registers.control & 0x80 == 0x80 && self.registers.status & 0x80 == 0x80 {
+            self.nmi_occured = true;
+        }
+    }
+
+    pub fn nmi_occured(&mut self) -> bool {
+        let occured = self.nmi_occured;
+        self.nmi_occured = false;
+        occured
     }
 
     fn increment_vram(&mut self) {
@@ -70,6 +94,11 @@ impl Ppu {
         }  else {
             self.vram_address += 32;
         }
+    }
+
+    fn control_register_write(&mut self, value: u8) {
+        self.registers.control = value;
+        self.generate_nmi_if_flags_set();
     }
 
     fn status_register_read(&mut self) -> u8 {
@@ -134,8 +163,76 @@ impl Ppu {
         self.object_attribute_memory = data;
     }
 
+    // how many cycles will be executed this cpu cycle
+    // also updates counters
+    fn get_cycle_count(&mut self) -> u8 {
+        if self.tv_system.ppu_extra_cycle_every_cpu_cycle != 0 {
+            self.tv_system.extra_cycle_counter += 1;
+            if self.tv_system.extra_cycle_counter == self.tv_system.ppu_extra_cycle_every_cpu_cycle {
+                self.tv_system.extra_cycle_counter = 0;
+                self.tv_system.ppu_cycles_per_cpu_cycle + 1
+            } else {
+                self.tv_system.ppu_cycles_per_cpu_cycle
+            }
+        } else {
+            self.tv_system.ppu_cycles_per_cpu_cycle
+        }
+    }
 
-    pub fn execute_cycle(&mut self) {
+    pub fn execute_cycles(&mut self) {
+        let cycles = self.get_cycle_count();
+        for _ in 0..cycles {
+            self.execute_cycle();
+        }
+    }
+
+    fn execute_cycle(&mut self) {
+//        println!("Scanline: {}, pos at scanline: {}", self.current_scanline, self.pos_at_scanline);
+        let rendered_scanlines = 240;
+        if self.current_scanline < self.tv_system.vblank_frames {
+            self.do_vblank();
+        } else if self.current_scanline == self.tv_system.vblank_frames {
+            self.do_pre_render_line();
+        } else if self.current_scanline > self.tv_system.vblank_frames
+            && self.current_scanline <= self.tv_system.vblank_frames + rendered_scanlines {
+            self.do_render();
+        } else if self.current_scanline > self.tv_system.vblank_frames + rendered_scanlines
+            && self.current_scanline <= self.tv_system.vblank_frames + rendered_scanlines + self.tv_system.post_render_scanlines {
+            // post render line - do nothing.
+            self.dummy_scanline()
+        } else {
+            self.current_scanline = 0;
+            self.execute_cycle();
+        }
+    }
+
+    fn do_vblank(&mut self) {
+        // VBLANK - do not access memory or render.
+        // However, set vblank flag on second tick of first scanline and raise NMI if nmi flag is set
+        if self.current_scanline == 0 && self.pos_at_scanline == 1 {
+            self.registers.status = self.registers.status | 0x80;
+            self.generate_nmi_if_flags_set();
+        }
+        self.dummy_scanline();
+    }
+
+    fn do_pre_render_line(&mut self) {
+        if self.pos_at_scanline == 1 {
+            self.registers.status = self.registers.status & 0x7F;
+        }
+        self.dummy_scanline();
+    }
+
+    fn dummy_scanline(&mut self) {
+        self.pos_at_scanline += 1;
+        if self.pos_at_scanline == 340 {
+            self.pos_at_scanline = 0;
+            self.current_scanline += 1;
+        }
+    }
+
+    fn do_render(&mut self) {
+        self.dummy_scanline();
     }
 
 }
@@ -167,6 +264,7 @@ impl Registers {
 mod tests {
     use super::*;
     use memory::Memory;
+    use rom::TvSystem;
 
     struct MockMemory {
         memory: Vec<u8>
@@ -191,7 +289,7 @@ mod tests {
     }
 
     fn create_test_ppu() -> Ppu {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::new(&TvSystem::NTSC);
         // replace vram with mock
         ppu.vram = Box::new(MockMemory::new());
         ppu
@@ -202,6 +300,15 @@ mod tests {
         let mut ppu = create_test_ppu();
         ppu.write(0x2000, 0x13);
         assert_eq!(0x13, ppu.registers.control);
+    }
+
+    #[test]
+    fn write_to_0x2000_generates_nmi_if_nmi_bit_will_be_set_and_vblank_bit_is_set() {
+        let mut ppu = create_test_ppu();
+        ppu.registers.status = 0x80;
+        ppu.nmi_occured = false;
+        ppu.write(0x2000, 0x83);
+        assert_eq!(true, ppu.nmi_occured);
     }
 
     #[test]
@@ -519,4 +626,142 @@ mod tests {
         ppu.oam_dma_write(data.clone());
         assert_eq!(data, ppu.object_attribute_memory);
     }
+
+    #[test]
+    fn get_cycle_count_returns_same_value_every_time_if_no_extra_cycles_are_needed() {
+        let mut ppu = create_test_ppu();
+        ppu.tv_system.ppu_cycles_per_cpu_cycle = 4;
+        ppu.tv_system.ppu_extra_cycle_every_cpu_cycle = 0;
+        for _ in 0..100 {
+            assert_eq!(4, ppu.get_cycle_count());
+        }
+    }
+
+    #[test]
+    fn get_cycle_count_does_not_modify_extra_cycle_counter_if_no_extra_cycles_are_needed() {
+        let mut ppu = create_test_ppu();
+        ppu.tv_system.ppu_cycles_per_cpu_cycle = 4;
+        ppu.tv_system.ppu_extra_cycle_every_cpu_cycle = 0;
+        for _ in 0..100 {
+            ppu.get_cycle_count();
+            assert_eq!(0, ppu.tv_system.extra_cycle_counter);
+        }
+    }
+
+    #[test]
+    fn get_cycle_count_returns_extra_cycle_every_n_frames_if_cycle_is_required() {
+        let mut ppu = create_test_ppu();
+        ppu.tv_system.ppu_cycles_per_cpu_cycle = 3;
+        ppu.tv_system.ppu_extra_cycle_every_cpu_cycle = 5;
+        assert_eq!(3, ppu.get_cycle_count());
+        assert_eq!(3, ppu.get_cycle_count());
+        assert_eq!(3, ppu.get_cycle_count());
+        assert_eq!(3, ppu.get_cycle_count());
+        assert_eq!(4, ppu.get_cycle_count());
+        assert_eq!(3, ppu.get_cycle_count());
+    }
+
+    #[test]
+    fn get_cycle_count_modifies_extra_cycle_counter_if_extra_cycle_is_needed() {
+        let mut ppu = create_test_ppu();
+        ppu.tv_system.ppu_cycles_per_cpu_cycle = 4;
+        ppu.tv_system.ppu_extra_cycle_every_cpu_cycle = 7;
+        for i in 1..100 {
+            ppu.get_cycle_count();
+            assert_eq!(i % 7, ppu.tv_system.extra_cycle_counter);
+        }
+    }
+
+    #[test]
+    fn ppu_sets_vblank_bit_on_vblank_first_scanline_second_pixel_if_nmi_flag_is_set() {
+        let mut ppu = create_test_ppu();
+        ppu.current_scanline = 0;
+        ppu.pos_at_scanline = 1;
+        ppu.registers.status = 0x80;
+        ppu.registers.control = 0;
+        ppu.execute_cycle();
+        assert_eq!(0x80, ppu.registers.status & 0x80);
+    }
+
+    #[test]
+    fn ppu_sets_vblank_bit_on_vblank_first_scanline_second_pixel_if_nmi_flag_is_cleared() {
+        let mut ppu = create_test_ppu();
+        ppu.current_scanline = 0;
+        ppu.pos_at_scanline = 1;
+        ppu.registers.status = 0;
+        ppu.registers.control = 0;
+        ppu.execute_cycle();
+        assert_eq!(0x80, ppu.registers.status & 0x80);
+    }
+
+    #[test]
+    fn ppu_generates_nmi_on_vblank_first_scanline_second_pixel_if_nmi_flag_is_set() {
+        let mut ppu = create_test_ppu();
+        ppu.current_scanline = 0;
+        ppu.pos_at_scanline = 1;
+        ppu.registers.status = 0x00;
+        ppu.registers.control = 0x80;
+        ppu.execute_cycle();
+        assert_eq!(true, ppu.nmi_occured);
+    }
+
+    #[test]
+    fn ppu_does_not_generate_nmi_on_vblank_first_scanline_second_pixel_if_nmi_flag_is_cleared() {
+        let mut ppu = create_test_ppu();
+        ppu.current_scanline = 0;
+        ppu.pos_at_scanline = 1;
+        ppu.registers.status = 0x00;
+        ppu.registers.control = 0x00;
+        ppu.execute_cycle();
+        assert_eq!(false, ppu.nmi_occured);
+    }
+
+    #[test]
+    fn ppu_clears_vblank_bit_on_pre_render_scanline_second_pixel() {
+        let mut ppu = create_test_ppu();
+
+        ppu.tv_system.vblank_frames = 50;
+        ppu.current_scanline = 50;
+        ppu.pos_at_scanline = 1;
+        ppu.registers.status = 0x80;
+        ppu.registers.control = 0;
+
+        ppu.execute_cycle();
+
+        assert_eq!(0x00, ppu.registers.status);
+    }
+
+    #[test]
+    fn nmi_occured_returns_true_if_nmi_has_occured() {
+        let mut ppu = create_test_ppu();
+
+        ppu.nmi_occured = true;
+        assert_eq!(true, ppu.nmi_occured());
+    }
+
+    #[test]
+    fn nmi_occured_returns_false_if_nmi_has_not_occured() {
+        let mut ppu = create_test_ppu();
+
+        ppu.nmi_occured = false;
+        assert_eq!(false, ppu.nmi_occured());
+    }
+    #[test]
+    fn nmi_occured_clears_nmi_status_if_nmi_has_occured() {
+        let mut ppu = create_test_ppu();
+
+        ppu.nmi_occured = true;
+        ppu.nmi_occured();
+        assert_eq!(false, ppu.nmi_occured);
+    }
+    #[test]
+    fn nmi_does_nothing_to_nmi_status_nmi_has_not_occured() {
+        let mut ppu = create_test_ppu();
+
+        ppu.nmi_occured = false;
+        ppu.nmi_occured();
+        assert_eq!(false, ppu.nmi_occured);
+    }
+
+
 }
