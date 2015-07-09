@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 pub struct MemoryBus {
-    rom: Box<Memory>,
+    rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
     ppu: Rc<RefCell<Ppu>>,
     // TODO: APU, controllers
@@ -18,7 +18,7 @@ impl Memory for MemoryBus {
         } else if (address >= 0x2000 && address <= 0x3FFF) || address == 0x4014 {
             self.ppu.borrow_mut().read(address)
         } else if address >= 0x4020 {
-            self.rom.read(address)
+            self.rom.borrow_mut().read(address)
         } else {
             0
         }
@@ -29,9 +29,10 @@ impl Memory for MemoryBus {
             self.ram.write(address, value);
         } else if address >= 0x2000 && address <= 0x3FFF {
             self.ppu.borrow_mut().write(address, value);
-        } else if address == 0x4014 { // OAM DMA
+        } else if address == 0x4014 {
             let start = (value as u16) << 8;
             let mut data = vec![];
+
             for i in start..(start + 0xFF) {
                 data.push(self.read(i));
             }
@@ -39,14 +40,14 @@ impl Memory for MemoryBus {
             self.ppu.borrow_mut().oam_dma_write(data);
         }
         else if address >= 0x4020 {
-            self.rom.write(address, value);
+            self.rom.borrow_mut().write(address, value);
         }
     }
 
 }
 
 impl MemoryBus {
-    pub fn new(rom: Box<Memory>, ppu: Rc<RefCell<Ppu>>) -> MemoryBus  {
+    pub fn new(rom: Rc<RefCell<Box<Memory>>>, ppu: Rc<RefCell<Ppu>>) -> MemoryBus  {
         MemoryBus {
             rom: rom,
             ram: Box::new(Ram::new()) as Box<Memory>,
@@ -61,7 +62,7 @@ mod tests {
     use super::*;
     use memory::*;
     use ppu::*;
-    use rom::TvSystem;
+    use rom::*;
     use std::cell::RefCell;
     use std::rc::Rc;
     // 64 kilobytes of memory, no mapped addresses
@@ -94,20 +95,21 @@ mod tests {
     impl MemoryBus {
         fn assert_value_present_in_ram_only(&mut self, address: u16, value: u8) {
             assert_eq!(value, self.ram.read(address));
-            assert!(self.rom.read(address) != value);
+            assert!(self.rom.borrow_mut().read(address) != value);
         }
 
         fn assert_value_present_in_rom_only(&mut self, address: u16, value: u8) {
-            assert_eq!(value, self.rom.read(address));
+            assert_eq!(value, self.rom.borrow_mut().read(address));
             assert!(self.ram.read(address) != value);
         }
     }
 
     fn create_test_memory_bus() -> MemoryBus {
+        let rom = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
         MemoryBus {
-            rom: Box::new(MockMemory::new()),
+            rom: rom.clone(),
             ram: Box::new(MockMemory::new()),
-            ppu: Rc::new(RefCell::new(Ppu::new(&TvSystem::NTSC))),
+            ppu: Rc::new(RefCell::new(Ppu::new(TvSystem::NTSC, Mirroring::VerticalMirroring, rom.clone()))),
         }
     }
 
@@ -178,21 +180,21 @@ mod tests {
     #[test]
     fn read_above_0x4020_is_read_from_rom() {
         let mut mem_bus = create_test_memory_bus();
-        mem_bus.rom.write(0xEFFF, 0x4B);
+        mem_bus.rom.borrow_mut().write(0xEFFF, 0x4B);
         assert_eq!(0x4B, mem_bus.read(0xEFFF));
     }
 
     #[test]
     fn read_at_0x4020_is_read_from_rom() {
         let mut mem_bus = create_test_memory_bus();
-        mem_bus.rom.write(0x4020, 0x4B);
+        mem_bus.rom.borrow_mut().write(0x4020, 0x4B);
         assert_eq!(0x4B, mem_bus.read(0x4020));
     }
 
     #[test]
     fn read_at_0xFFFF_is_read_from_rom() {
         let mut mem_bus = create_test_memory_bus();
-        mem_bus.rom.write(0xFFFF, 0x4B);
+        mem_bus.rom.borrow_mut().write(0xFFFF, 0x4B);
         assert_eq!(0x4B, mem_bus.read(0xFFFF));
     }
 }

@@ -37,7 +37,6 @@ impl Memory for Cpu {
                 513
             }
         }
-
         self.memory.borrow_mut().write(address, value);
     }
 

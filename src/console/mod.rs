@@ -20,9 +20,12 @@ impl Console {
     pub fn new (rom_path: &str) -> Console {
         let rom = Box::new(read_rom(rom_path));
         let tv_system = rom.header.tv_system.clone();
-        let ppu = Rc::new(RefCell::new(Ppu::new(&tv_system)));
+        let mirroring = rom.header.mirroring.clone();
 
-        let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom, ppu.clone())) as Box<Memory>));
+        let rom_mem = Rc::new(RefCell::new(rom as Box<Memory>));
+        let ppu = Rc::new(RefCell::new(Ppu::new(tv_system.clone(), mirroring, rom_mem.clone())));
+
+        let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom_mem.clone(), ppu.clone())) as Box<Memory>));
         Console {
             memory: mem.clone(),
             cpu: Cpu::new(&tv_system, mem.clone()),

@@ -2,11 +2,13 @@ mod vram;
 mod tv_system_values;
 
 use memory::Memory;
-use rom::TvSystem;
+use rom::*;
 use self::vram::Vram;
 use self::tv_system_values::TvSystemValues;
 
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct Ppu {
     object_attribute_memory: Vec<u8>,
@@ -61,10 +63,10 @@ impl Memory for Ppu {
 }
 
 impl Ppu {
-    pub fn new(tv_system: &TvSystem) -> Ppu {
+    pub fn new(tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>> ) -> Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
-            vram: Box::new(Vram::new()),
+            vram: Box::new(Vram::new(mirroring, rom)),
             registers: Registers::new(),
             address_latch: false,
             vram_address: 0,
@@ -264,7 +266,9 @@ impl Registers {
 mod tests {
     use super::*;
     use memory::Memory;
-    use rom::TvSystem;
+    use rom::*;
+    use std::rc::Rc;
+    use std::cell::RefCell;
 
     struct MockMemory {
         memory: Vec<u8>
@@ -289,7 +293,8 @@ mod tests {
     }
 
     fn create_test_ppu() -> Ppu {
-        let mut ppu = Ppu::new(&TvSystem::NTSC);
+        let rom = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
+        let mut ppu = Ppu::new(TvSystem::NTSC, Mirroring::VerticalMirroring, rom);
         // replace vram with mock
         ppu.vram = Box::new(MockMemory::new());
         ppu
