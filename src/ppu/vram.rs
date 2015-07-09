@@ -5,7 +5,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 pub struct Vram {
-    memory: Vec<u8>,
+    memory: Vec<u8>, // regular 2kb ram
+    palette_memory: Vec<u8>, // memory for palettes, 32 bytes
     mirroring: Mirroring,
 }
 
@@ -13,10 +14,12 @@ impl Vram {
     pub fn new(mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Vram {
         Vram {
             memory: vec![0;0x0800],
+            palette_memory: vec![0;0x20],
             mirroring: mirroring,
         }
     }
 
+    // calculates address to ppu ram from ppu memory map address
     fn get_nametable_address(&mut self, address: u16) -> usize {
         if address >= 0x2000 && address < 0x2400 { // nametable 0 does not need mirroring
             (address - 0x2000) as usize
@@ -35,8 +38,23 @@ impl Vram {
         }
         else if address >= 0x2C00 && address < 0x3000 { // nametable 3 does not need mirroring
             (address - 0x2C00 + 0x400) as usize
-        } else {
+        } else if address >= 0x3000 && address < 0x3F00 { // 0x3000 - 0x3EFFF is mirror of 0x2000 - 0x2EFF
+            self.get_nametable_address(address - 0x1000)
+        }
+        else {
             panic!("Invalid nametable address: 0x{:04X}", address);
+        }
+    }
+
+    // calculates address to ppu palette memory from ppu memory map address
+    fn get_palette_address(&mut self, address: u16) -> usize {
+        let masked_address = address & 0x001F; // mask out the ignored bits
+        match masked_address {
+            0x0010 => 0x0000, // mirrored addresses
+            0x0014 => 0x0004,
+            0x0018 => 0x0008,
+            0x001C => 0x000C,
+            _ => masked_address as usize,
         }
     }
 }
@@ -44,19 +62,26 @@ impl Vram {
 
 impl Memory for Vram {
     fn read(&mut self, address: u16) -> u8 {
-        if address >= 0x2000 && address < 0x3000 { // read from nametable
+        if address >= 0x2000 && address < 0x3F00 { // read from nametable
             let mem_address = self.get_nametable_address(address);
             self.memory[mem_address]
-        } else {
+        } else if address >= 0x3F00 && address <= 0x3FFF { // read from palette memory
+            let palette_address = self.get_palette_address(address);
+            self.palette_memory[palette_address]
+        }
+        else {
             panic!("Read from PPU address 0x{:04X} is not implemented yet!", address);
         }
     }
 
     fn write(&mut self, address: u16, value: u8) {
-        if address >= 0x2000 && address < 0x3000 { // write to nametable
+        if address >= 0x2000 && address < 0x3F00 { // write to nametable
             let mem_address = self.get_nametable_address(address);
             self.memory[mem_address] = value;
-        } else {
+        } else if address >= 0x3F00 && address <= 0x3FFF { // write to palette memory
+            let palette_address = self.get_palette_address(address);
+            self.palette_memory[palette_address] = value;
+        }  else {
             panic!("Write to PPU address 0x{:04X} is not implemented yet!", address);
         }
 
@@ -280,4 +305,154 @@ mod tests {
         assert_eq!(0xFE, vram.read(0x2FFF));
     }
 
+    #[test]
+    fn vram_address_0x3000_mirrors_to_0x2000() {
+        let mut vram = create_test_vram();
+        vram.write(0x2000, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3000));
+    }
+
+    #[test]
+    fn vram_address_0x3500_mirrors_to_0x2500() {
+        let mut vram = create_test_vram();
+        vram.write(0x2500, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3500));
+    }
+
+    #[test]
+    fn vram_address_0x3EFF_mirrors_to_0x2EFF() {
+        let mut vram = create_test_vram();
+        vram.write(0x2EFF, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3EFF));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3F00_writes_to_beginning_of_palette_ram() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F00, 0xFE);
+        assert_eq!(0xFE, vram.palette_memory[0x00]);
+    }
+
+
+    #[test]
+    fn read_from_vram_address_0x3F00_reads_from_beginning_of_palette_ram() {
+        let mut vram = create_test_vram();
+        vram.palette_memory[0x00] = 0x15;
+        assert_eq!(0x15, vram.read(0x3F00));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3F1F_writes_to_end_of_palette_ram() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F1F, 0xFE);
+        assert_eq!(0xFE, vram.palette_memory[0x1F]);
+    }
+
+
+    #[test]
+    fn read_from_vram_address_0x3F1F_reads_from_end_of_palette_ram() {
+        let mut vram = create_test_vram();
+        vram.palette_memory[0x1F] = 0x15;
+        assert_eq!(0x15, vram.read(0x3F1F));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3F10_is_mirrored_to_0x3F00() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F10, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3F00));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3F10_is_mirrored_to_0x3F00() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F00, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F10));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3F14_is_mirrored_to_0x3F04() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F14, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3F04));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3F14_is_mirrored_to_0x3F04() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F04, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F14));
+    }
+
+
+    #[test]
+    fn write_to_vram_address_0x3F18_is_mirrored_to_0x3F08() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F18, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3F08));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3F18_is_mirrored_to_0x3F08() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F08, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F18));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3F1C_is_mirrored_to_0x3F0C() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F1C, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3F0C));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3F1C_is_mirrored_to_0x3F0C() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F0C, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F1C));
+    }
+
+
+    #[test]
+    fn write_to_vram_address_0x3F20_is_mirrored_to_0x3F00() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F20, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3F00));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3F20_is_mirrored_to_0x3F00() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F00, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F20));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3FFF_is_mirrored_to_0x3F1F() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F1F, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3FFF));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3FFF_is_mirrored_to_0x3F1F() {
+        let mut vram = create_test_vram();
+        vram.write(0x3FFF, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F1F));
+    }
+
+    #[test]
+    fn write_to_vram_address_0x3F45_is_mirrored_to_0x3F05() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F45, 0xFE);
+        assert_eq!(0xFE, vram.read(0x3F05));
+    }
+
+    #[test]
+    fn read_from_vram_address_0x3F45_is_mirrored_to_0x3F05() {
+        let mut vram = create_test_vram();
+        vram.write(0x3F05, 0xFA);
+        assert_eq!(0xFA, vram.read(0x3F45));
+    }
 }
