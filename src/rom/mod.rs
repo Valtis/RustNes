@@ -53,7 +53,7 @@ pub struct Rom {
 
 
 // this is an inefficient implementation, requiring address calculations on each read\write
-fn get_offset_temp_hardcore_impl(length: u8, address: u16) -> usize {
+fn get_offset_temp_hardcoded_impl(length: u8, address: u16) -> usize {
 
     // program rom is mapped to memory addresses 0x8000 - 0xBFFF and 0xC000 - 0xFFFF
     // if rom size is 16kb, 0x8000 - 0xBFFF and 0xC000 - 0xFFFF are mirrored
@@ -73,14 +73,20 @@ impl Memory for Rom {
         // TODO: Implement mappers & let them handle this
         // for now, mapper 0 is hardcoded (poorly)
 
-        let offset = get_offset_temp_hardcore_impl(self.header.prg_rom_size, address);
-        self.prg_rom_data[offset]
+        // basically the hardcoded assumption right now is that any read form 0x2000 or below is to chr rom,
+        // otherwise it's to prg rom
+        if address < 0x2000 {
+            self.chr_rom_data[address as usize]
+        } else {
+            let offset = get_offset_temp_hardcoded_impl(self.header.prg_rom_size, address);
+            self.prg_rom_data[offset]
+        }
     }
 
     fn write(&mut self, address: u16, value: u8) {
         // TODO: Implement mappers & let them handle this (memory mapped io for mapper registers)
         // for now, panic on write attempts
-        panic!("Writes are unimplemented for roms");
+        panic!("Writes are unimplemented for roms (address 0x{:04X}, value: 0x{:04X})", address, value);
     }
 }
 
