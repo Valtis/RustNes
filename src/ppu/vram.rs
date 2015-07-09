@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 pub struct Vram {
+    rom: Rc<RefCell<Box<Memory>>>,
     memory: Vec<u8>, // regular 2kb ram
     palette_memory: Vec<u8>, // memory for palettes, 32 bytes
     mirroring: Mirroring,
@@ -13,6 +14,7 @@ pub struct Vram {
 impl Vram {
     pub fn new(mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Vram {
         Vram {
+            rom: rom,
             memory: vec![0;0x0800],
             palette_memory: vec![0;0x20],
             mirroring: mirroring,
@@ -62,20 +64,23 @@ impl Vram {
 
 impl Memory for Vram {
     fn read(&mut self, address: u16) -> u8 {
-        if address >= 0x2000 && address < 0x3F00 { // read from nametable
+        if address < 0x2000 {
+            self.rom.borrow_mut().read(address)
+        } else if address >= 0x2000 && address < 0x3F00 { // read from nametable
             let mem_address = self.get_nametable_address(address);
             self.memory[mem_address]
         } else if address >= 0x3F00 && address <= 0x3FFF { // read from palette memory
             let palette_address = self.get_palette_address(address);
             self.palette_memory[palette_address]
-        }
-        else {
+        } else {
             panic!("Read from PPU address 0x{:04X} is not implemented yet!", address);
         }
     }
 
     fn write(&mut self, address: u16, value: u8) {
-        if address >= 0x2000 && address < 0x3F00 { // write to nametable
+        if address < 0x2000 {
+            self.rom.borrow_mut().write(address, value);
+        } else if address >= 0x2000 && address < 0x3F00 { // write to nametable
             let mem_address = self.get_nametable_address(address);
             self.memory[mem_address] = value;
         } else if address >= 0x3F00 && address <= 0x3FFF { // write to palette memory
@@ -122,8 +127,50 @@ mod tests {
     }
 
     fn create_test_vram() -> Vram {
-        let ram = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
-        Vram::new(Mirroring::HorizontalMirroring, ram)
+        let rom = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
+        Vram::new(Mirroring::HorizontalMirroring, rom)
+    }
+
+    #[test]
+    fn write_to_0x0000_is_redirected_to_rom() {
+        let mut vram = create_test_vram();
+        vram.write(0x0000, 0x7B);
+        assert_eq!(0x7B, vram.rom.borrow_mut().read(0x0000));
+    }
+
+    #[test]
+    fn read_from_0x0000_is_redirected_to_rom() {
+        let mut vram = create_test_vram();
+        vram.rom.borrow_mut().write(0x0000, 0x7B);
+        assert_eq!(0x7B, vram.read(0x0000));
+    }
+
+    #[test]
+    fn write_to_0x1FFF_is_redirected_to_rom() {
+        let mut vram = create_test_vram();
+        vram.write(0x1FFF, 0x7B);
+        assert_eq!(0x7B, vram.rom.borrow_mut().read(0x1FFF));
+    }
+
+    #[test]
+    fn read_from_0x1FFF_is_redirected_to_rom() {
+        let mut vram = create_test_vram();
+        vram.rom.borrow_mut().write(0x1FFF, 0x7B);
+        assert_eq!(0x7B, vram.read(0x1FFF));
+    }
+
+    #[test]
+    fn write_to_0x2000_is_not_redirected_to_rom() {
+        let mut vram = create_test_vram();
+        vram.write(0x2000, 0x7B);
+        assert_eq!(0x00, vram.rom.borrow_mut().read(0x2000));
+    }
+
+    #[test]
+    fn read_from_0x2000_is_not_redirected_to_rom() {
+        let mut vram = create_test_vram();
+        vram.rom.borrow_mut().write(0x2000, 0x7B);
+        assert_eq!(0x00, vram.read(0x2000));
     }
 
     #[test]
