@@ -20,7 +20,7 @@ pub struct Cpu {
     pub frequency: Frequency,
     program_counter:u16,
     stack_pointer:u8,
-    pub wait_counter: u8, // used by instructions that take more than 1 cycle to complete
+    pub wait_counter: u16, // used by instructions that take more than 1 cycle to complete
     status_flags:u8,
     a: u8,
     x: u8,
@@ -30,6 +30,14 @@ pub struct Cpu {
 
 impl Memory for Cpu {
     fn write(&mut self, address:u16, value: u8) {
+        if address == 0x4014 { // PPU DMA register - transfer takes time
+            self.wait_counter = if self.is_odd_cycle {
+                514
+            } else {
+                513
+            }
+        }
+
         self.memory.borrow_mut().write(address, value);
     }
 
@@ -2064,17 +2072,17 @@ impl Cpu {
         self.no_operation();
     }
 
-    fn unofficial_double_no_operation(&mut self, cycles: u8) {
+    fn unofficial_double_no_operation(&mut self, cycles: u16) {
         self.wait_counter = cycles;
         self.program_counter += 1;
     }
 
-    fn unofficial_triple_no_operation_no_page_penalty(&mut self, cycles: u8) {
+    fn unofficial_triple_no_operation_no_page_penalty(&mut self, cycles: u16) {
         self.wait_counter = cycles;
         self.program_counter += 2;
     }
     // add a cycle if page boundary is crossed
-    fn unofficial_triple_no_operation_page_penalty(&mut self, cycles: u8) {
+    fn unofficial_triple_no_operation_page_penalty(&mut self, cycles: u16) {
         let first = self.program_counter;
         let second = self.program_counter + 1;
         self.program_counter += 2;
@@ -9575,6 +9583,22 @@ mod tests {
         let mut cpu = create_test_cpu();
         cpu.handle_nmi();
         assert_eq!(7, cpu.wait_counter);
+    }
+
+    #[test]
+    fn write_to_ppu_oam_register_takes_513_on_even_cycle() {
+        let mut cpu = create_test_cpu();
+        cpu.is_odd_cycle = false;
+        cpu.write(0x4014, 0x12);
+        assert_eq!(513, cpu.wait_counter);
+    }
+
+    #[test]
+    fn write_to_ppu_oam_register_takes_514_on_odd_cycle() {
+        let mut cpu = create_test_cpu();
+        cpu.is_odd_cycle = true;
+        cpu.write(0x4014, 0x12);
+        assert_eq!(514, cpu.wait_counter);
     }
 
 }
