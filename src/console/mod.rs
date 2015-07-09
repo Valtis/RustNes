@@ -49,8 +49,6 @@ impl Console {
         //let mut ppu_fractional_cycles = 0.0;
         self.cpu.reset();
 
-        println!("\nPC: {}\n", self.cpu.program_counter);
-
         let mut time = time::precise_time_ns();
         loop {
             let current_time = time::precise_time_ns();
@@ -72,9 +70,9 @@ impl Console {
         if self.cpu.wait_counter > 0 {
             self.cpu.wait_counter -= 1;
         } else {
-
             // check for nmi from ppu
-            if self.ppu.borrow_mut().nmi_occured() {
+            let nmi_occured = self.ppu.borrow_mut().nmi_occured();
+            if nmi_occured {
                 self.cpu.handle_nmi();
                 return;
             } else {
