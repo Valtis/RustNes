@@ -18,13 +18,24 @@ use std::cell::RefCell;
 pub struct Cpu {
     memory: Rc<RefCell<Box<Memory>>>, // reference to memory, so that cpu can use it
     pub frequency: Frequency,
-    pub program_counter:u16,
-    pub stack_pointer:u8,
+    program_counter:u16,
+    stack_pointer:u8,
     pub wait_counter: u8, // used by instructions that take more than 1 cycle to complete
-    pub status_flags:u8,
-    pub a: u8,
-    pub x: u8,
-    pub y: u8,
+    status_flags:u8,
+    a: u8,
+    x: u8,
+    y: u8,
+    is_odd_cycle: bool, // PPU OAM DMA timing depends on whether cpu is on odd\even cycle
+}
+
+impl Memory for Cpu {
+    fn write(&mut self, address:u16, value: u8) {
+        self.memory.borrow_mut().write(address, value);
+    }
+
+    fn read(&mut self, address: u16) -> u8 {
+        self.memory.borrow_mut().read(address)
+    }
 }
 
 impl Cpu {
@@ -39,6 +50,7 @@ impl Cpu {
             a: 0,
             x: 0,
             y: 0,
+            is_odd_cycle: false
         }
     }
 
@@ -63,7 +75,8 @@ impl Cpu {
 
 
     pub fn execute_instruction(&mut self) {
-        let instruction = self.memory.borrow_mut().read(self.program_counter);
+        let pc = self.program_counter;
+        let instruction = self.read(pc);
 
         println!("{:04X} Opcode:{:02X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
             self.program_counter,
@@ -310,7 +323,10 @@ impl Cpu {
             _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
                 self.program_counter - 1, self),
         }
+
+        self.is_odd_cycle = !self.is_odd_cycle;
     }
+
     fn set_negative_flag(&mut self, value: u8) {
         self.status_flags = (self.status_flags & 0x7F) | (value & 0x80);
     }
@@ -326,7 +342,8 @@ impl Cpu {
     }
 
     fn get_byte_operand(&mut self) -> u8 {
-        let byte = self.memory.borrow_mut().read(self.program_counter);
+        let pc = self.program_counter;
+        let byte = self.read(pc);
         self.program_counter += 1;
         byte
     }
@@ -341,9 +358,11 @@ impl Cpu {
 
     // must handle pc wrapping, as 0xFFFE\0xFFFF stores interrupt vector
     fn get_absolute_address(&mut self) -> u16 {
-        let low_byte = self.memory.borrow_mut().read(self.program_counter);
+        let mut pc = self.program_counter;
+        let low_byte = self.read(pc);
         self.program_counter += 1;
-        let high_byte = self.memory.borrow_mut().read(self.program_counter);
+        pc = self.program_counter;
+        let high_byte = self.read(pc);
         self.program_counter = ((self.program_counter as u32 + 1) & 0xFFFF) as u16;
 
          ((high_byte as u16) << 8) | low_byte as u16
@@ -355,16 +374,17 @@ impl Cpu {
 
     fn get_indirect_x_address(&mut self) -> u16 {
         let zero_page_address = self.get_byte_operand() as u16;
-        let low_byte = self.memory.borrow_mut().read((zero_page_address + self.x as u16) & 0x00FF) as u16;
-        let high_byte = self.memory.borrow_mut().read((zero_page_address + self.x as u16 + 1) & 0x00FF) as u16;
+        let x = self.x;
+        let low_byte = self.read((zero_page_address + x as u16) & 0x00FF) as u16;
+        let high_byte = self.read((zero_page_address + x as u16 + 1) & 0x00FF) as u16;
         (high_byte << 8) | low_byte
     }
 
     fn get_indirect_y_address(&mut self) -> u16 {
         let zero_page_address =  self.get_byte_operand() as u16;
 
-        let low_byte = self.memory.borrow_mut().read(zero_page_address) as u16;
-        let high_byte = self.memory.borrow_mut().read((zero_page_address + 1) & 0x00FF) as u16;
+        let low_byte = self.read(zero_page_address) as u16;
+        let high_byte = self.read((zero_page_address + 1) & 0x00FF) as u16;
 
         let base_address = (high_byte << 8) | low_byte;
         let four_byte_address = base_address as u32 + self.y as u32;
@@ -380,7 +400,7 @@ impl Cpu {
     fn read_absolute(&mut self) -> u8 {
         self.wait_counter = 4;
         let address = self.get_absolute_address();
-        self.memory.borrow_mut().read(address)
+        self.read(address)
     }
 
     fn read_absolute_with_offset(&mut self, offset: u16) -> u8 {
@@ -392,7 +412,7 @@ impl Cpu {
         } else {
             self.wait_counter = 5;
         }
-        self.memory.borrow_mut().read(address)
+        self.read(address)
     }
 
     fn read_absolute_x(&mut self) -> u8 {
@@ -408,13 +428,13 @@ impl Cpu {
     fn read_zero_page(&mut self) -> u8 {
         self.wait_counter = 3;
         let address = self.get_zero_page_address();
-        self.memory.borrow_mut().read(address as u16)
+        self.read(address as u16)
     }
 
     fn read_zero_page_with_offset(&mut self, offset: u16) -> u8 {
         self.wait_counter = 4;
         let address = self.get_zero_page_address_with_offset(offset);
-        self.memory.borrow_mut().read(address)
+        self.read(address)
     }
 
     fn read_zero_page_x(&mut self) -> u8 {
@@ -430,7 +450,7 @@ impl Cpu {
     fn read_indirect_x(&mut self) -> u8 {
         self.wait_counter = 6;
         let address = self.get_indirect_x_address();
-        self.memory.borrow_mut().read(address)
+        self.read(address)
     }
     // duplicates get_indirect_y_address_code because timing depends on whether
     // the base address and final address are on the same page or not.
@@ -438,8 +458,8 @@ impl Cpu {
     fn read_indirect_y(&mut self) -> u8 {
         let zero_page_address =  self.get_byte_operand() as u16;
 
-        let low_byte = self.memory.borrow_mut().read(zero_page_address) as u16;
-        let high_byte = self.memory.borrow_mut().read((zero_page_address + 1) & 0x00FF) as u16;
+        let low_byte = self.read(zero_page_address) as u16;
+        let high_byte = self.read((zero_page_address + 1) & 0x00FF) as u16;
 
         let base_address = (high_byte << 8) | low_byte;
         let four_byte_address =  base_address as u32 + self.y as u32;
@@ -452,7 +472,7 @@ impl Cpu {
             self.wait_counter = 6;
         }
 
-        self.memory.borrow_mut().read(final_address)
+        self.read(final_address)
     }
 
     fn set_zero_negative_flags(&mut self, value: u8) {
@@ -478,63 +498,65 @@ impl Cpu {
     fn do_zero_page_store(&mut self, value: u8) {
         self.wait_counter = 3;
         let address = self.get_zero_page_address();
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_zero_page_x_store(&mut self, value: u8) {
         let offset = self.x as u16;
         self.wait_counter = 4;
         let address = self.get_zero_page_address_with_offset(offset);
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_zero_page_y_store(&mut self, value: u8) {
         let offset = self.y as u16;
         self.wait_counter = 4;
         let address = self.get_zero_page_address_with_offset(offset);
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_absolute_store(&mut self, value: u8) {
         self.wait_counter = 4;
         let address = self.get_absolute_address();
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_absolute_x_store(&mut self, value: u8) {
         self.wait_counter = 5;
         let offset = self.x as u16;
         let address = self.get_absolute_address_with_offset(offset);
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_absolute_y_store(&mut self, value: u8) {
         self.wait_counter = 5;
         let offset = self.y as u16;
         let address = self.get_absolute_address_with_offset(offset);
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_indirect_x_store(&mut self, value: u8) {
         self.wait_counter = 6;
         let address = self.get_indirect_x_address();
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn do_indirect_y_store(&mut self, value: u8) {
         self.wait_counter = 6;
         let address = self.get_indirect_y_address();
-        self.memory.borrow_mut().write(address, value);
+        self.write(address, value);
     }
 
     fn push_value_into_stack(&mut self, value: u8) {
-        self.memory.borrow_mut().write(0x0100 + self.stack_pointer as u16, value);
+        let sp = self.stack_pointer as u16;
+        self.write(0x0100 + sp, value);
         self.stack_pointer -= 1;
     }
 
     fn pop_value_from_stack(&mut self) -> u8 {
         self.stack_pointer += 1;
-        self.memory.borrow_mut().read(0x0100 + self.stack_pointer as u16)
+        let sp = self.stack_pointer as u16;
+        self.read(0x0100 + sp)
     }
 
     fn do_and(&mut self, operand: u8) {
@@ -840,11 +862,11 @@ impl Cpu {
         // 6502 has a bug where high byte is fetched incorrectly when low byte resides
         // at xxFF. The high byte is incorrectly fetched from xx00 instead of
         // the beginning of the next page
-        let low_byte = self.memory.borrow_mut().read(indirect_address) as u16;
+        let low_byte = self.read(indirect_address) as u16;
         let high_byte = if indirect_address & 0x00FF == 0x00FF {
-            self.memory.borrow_mut().read(indirect_address - 255) as u16
+            self.read(indirect_address - 255) as u16
         } else {
-            self.memory.borrow_mut().read(indirect_address + 1) as u16
+            self.read(indirect_address + 1) as u16
         };
 
         let address = (high_byte << 8) | low_byte;
