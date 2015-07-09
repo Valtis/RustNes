@@ -33,7 +33,7 @@ impl Memory for MemoryBus {
             let start = (value as u16) << 8;
             let mut data = vec![];
 
-            for i in start..(start + 0xFF) {
+            for i in start..(start + 0x100) {
                 data.push(self.read(i));
             }
 
