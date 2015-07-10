@@ -16,6 +16,7 @@ pub struct Ppu {
     registers: Registers,
     address_latch: bool,
     vram_address: u16,
+    fine_x_scroll: u8,
     vram_read_buffer: u8,
     tv_system: TvSystemValues,
     current_scanline: u16,
@@ -70,6 +71,7 @@ impl Ppu {
             registers: Registers::new(),
             address_latch: false,
             vram_address: 0,
+            fine_x_scroll: 0,
             vram_read_buffer: 0,
             tv_system: TvSystemValues::new(&tv_system),
             current_scanline: 0,
@@ -122,15 +124,62 @@ impl Ppu {
     }
 
     fn scroll_register_write(&mut self, value: u8) {
+        if self.address_latch == false {
+        /*
+            $2005 first write (w is 0)
+
+            t: ....... ...HGFED = d: HGFED...
+            x:              CBA = d: .....CBA
+            w:                  = 1
+
+            Where w is the address latch, d is data to be written, x is the fine scroll value and
+            t is the 15 bit temporary register
+        */
+            self.fine_x_scroll = value & 0x07;
+            self.registers.temporary = self.registers.temporary & 0xFFE0; // clear bits
+            self.registers.temporary = self.registers.temporary | ((value & 0xF8) as u16) >> 3;
+
+        } else {
+        /*
+            $2005 second write (w is 1)
+
+            t: CBA..HG FED..... = d: HGFEDCBA
+            w:                  = 0
+        */
+            self.registers.temporary = (self.registers.temporary & 0x0FFF) | ((value as u16) & 0x0007) << 12;
+            self.registers.temporary = (self.registers.temporary & 0xFC1F) | ((value as u16) & 0x00F8) << 2;
+        }
         self.address_latch = !self.address_latch;
-        self.registers.scroll = value;
     }
 
     fn ppu_address_register_write(&mut self, value: u8) {
-        if self.address_latch {
-            self.vram_address = self.vram_address & 0xFF00 | value as u16;
+        if self.address_latch == false {
+            /*
+                $2006 first write (w is 0)
+
+                t: .FEDCBA ........ = d: ..FEDCBA
+                t: X...... ........ = 0
+                w:                  = 1
+
+                Where w is the address latch, d is data to be written and t is the 15 bit temporary
+                register
+            */
+
+            self.registers.temporary = self.registers.temporary & 0x80FF; // clear bits
+            self.registers.temporary = self.registers.temporary | ((value & 0x3F) as u16) << 8;
+
         } else {
-            self.vram_address = self.vram_address & 0x00FF | ((value as u16) << 8);
+            /*
+                $2006 second write (w is 1)
+
+                t: ....... HGFEDCBA = d: HGFEDCBA
+                v                   = t
+                w:                  = 0
+                As above. V is the vram address register
+            */
+            self.registers.temporary = self.registers.temporary & 0xFF00; // clear low 8 bytes
+            self.registers.temporary = self.registers.temporary | value as u16;
+            self.vram_address = self.registers.temporary;
         }
         self.address_latch = !self.address_latch;
     }
@@ -154,6 +203,8 @@ impl Ppu {
 
     fn ppu_data_register_write(&mut self, value: u8) {
         let address = self.vram_address;
+        println!("Data write to address 0x{:04X}", address);
+
         self.increment_vram();
         self.vram.write(address, value);
     }
@@ -189,7 +240,6 @@ impl Ppu {
     }
 
     fn execute_cycle(&mut self) {
-//        println!("Scanline: {}, pos at scanline: {}", self.current_scanline, self.pos_at_scanline);
         let rendered_scanlines = 240;
         if self.current_scanline < self.tv_system.vblank_frames {
             self.do_vblank();
@@ -204,7 +254,7 @@ impl Ppu {
             self.dummy_scanline()
         } else {
             self.current_scanline = 0;
-            self.execute_cycle();
+            self.execute_cycle(); // start executing from beginning again
         }
     }
 
@@ -219,7 +269,7 @@ impl Ppu {
     }
 
     fn do_pre_render_line(&mut self) {
-        if self.pos_at_scanline == 1 {
+        if self.pos_at_scanline == 1 { // unset vblank flag on second tick
             self.registers.status = self.registers.status & 0x7F;
         }
         self.dummy_scanline();
@@ -234,9 +284,14 @@ impl Ppu {
     }
 
     fn do_render(&mut self) {
+        if self.pos_at_scanline == 0 {
+            // idle cycle
+        } else {
+
+        }
+
         self.dummy_scanline();
     }
-
 }
 
 #[derive(Debug)]
@@ -246,7 +301,7 @@ struct Registers {
     status: u8,
     oam_address: u8,
     oam_dma: u8,
-    scroll: u8,
+    temporary: u16, // stores temporary values when writing to 0x2005/0x2006
 }
 
 impl Registers {
@@ -257,7 +312,7 @@ impl Registers {
             status: 0,
             oam_address: 0,
             oam_dma: 0,
-            scroll: 0,
+            temporary: 0,
         }
     }
 }
@@ -414,11 +469,41 @@ mod tests {
     }
 
     #[test]
-    fn write_to_0x2005_changes_scroll_register() {
+    fn first_write_to_0x2005_sets_fine_x_scroll_register_correctly() {
         let mut ppu = create_test_ppu();
-        ppu.write(0x2005, 0x13);
-        assert_eq!(0x13, ppu.registers.scroll);
+        ppu.address_latch = false;
+        ppu.write(0x2005, 0x1B);
+        assert_eq!(3, ppu.fine_x_scroll);
     }
+
+    #[test]
+    fn first_write_to_0x2005_sets_temporary_register_address_bits_correctly() {
+        let mut ppu = create_test_ppu();
+        ppu.address_latch = false;
+        ppu.registers.temporary = 0xFFFF;
+        ppu.write(0x2005, 0x1B);
+        assert_eq!(0xFFE3, ppu.registers.temporary);
+    }
+
+    #[test]
+    fn second_write_to_0x2005_does_not_touch_fine_x_scroll() {
+        let mut ppu = create_test_ppu();
+        ppu.address_latch = true;
+        ppu.fine_x_scroll = 0;
+        ppu.write(0x2005, 0x1B);
+        assert_eq!(0, ppu.fine_x_scroll);
+    }
+
+    #[test]
+    fn second_write_to_0x2005_sets_temporary_register_address_bits_correctly() {
+        let mut ppu = create_test_ppu();
+        ppu.address_latch = true;
+        ppu.registers.temporary = 0xFFFF;
+        ppu.write(0x2005, 0x1B);
+        assert_eq!(0x3C7F, ppu.registers.temporary);
+    }
+
+
 
     #[test]
     #[should_panic]
@@ -467,19 +552,28 @@ mod tests {
     }
 
     #[test]
-    fn write_to_0x2006_writes_high_byte_if_latch_is_unset() {
+    fn write_to_0x2006_writes_first_6_bits_of_high_byte_to_temporary_register_if_latch_is_unset() {
         let mut ppu = create_test_ppu();
         ppu.address_latch = false;
-        ppu.vram_address = 0x1234;
-        ppu.write(0x2006, 0x13);
-        assert_eq!(0x1334, ppu.vram_address);
+        ppu.registers.temporary = 0x000;
+        ppu.write(0x2006, 0xFF);
+        assert_eq!(0x3F00, ppu.registers.temporary);
     }
 
     #[test]
-    fn write_to_0x2006_writes_low_byte_if_latch_is_set() {
+    fn write_to_0x2006_writes_low_byte_to_temporary_register_if_latch_is_set() {
         let mut ppu = create_test_ppu();
         ppu.address_latch = true;
-        ppu.vram_address = 0x1234;
+        ppu.registers.temporary = 0x1234;
+        ppu.write(0x2006, 0x6F);
+        assert_eq!(0x126F, ppu.registers.temporary);
+    }
+
+    #[test]
+    fn write_to_0x2006_copies_temporary_register_to_address_register_if_latch_is_set() {
+        let mut ppu = create_test_ppu();
+        ppu.address_latch = true;
+        ppu.registers.temporary = 0x1234;
         ppu.write(0x2006, 0x6F);
         assert_eq!(0x126F, ppu.vram_address);
     }
@@ -759,6 +853,7 @@ mod tests {
         ppu.nmi_occured();
         assert_eq!(false, ppu.nmi_occured);
     }
+
     #[test]
     fn nmi_does_nothing_to_nmi_status_nmi_has_not_occured() {
         let mut ppu = create_test_ppu();
