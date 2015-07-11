@@ -1,16 +1,19 @@
 mod vram;
 mod tv_system_values;
+pub mod renderer;
+
 
 use memory::Memory;
 use rom::*;
 use self::vram::Vram;
 use self::tv_system_values::TvSystemValues;
+use self::renderer::Renderer;
 
 use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-pub struct Ppu {
+pub struct Ppu<'a> {
     object_attribute_memory: Vec<u8>,
     vram: Box<Memory>,
     registers: Registers,
@@ -22,18 +25,19 @@ pub struct Ppu {
     current_scanline: u16,
     pos_at_scanline: u16,
     nmi_occured: bool,
+    renderer: Renderer<'a>,
 }
 
 
 
-impl fmt::Debug for Ppu {
+impl<'a> fmt::Debug for Ppu<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{:?}", self.registers));
         write!(f, "<Memory contents not included>")
     }
 }
 
-impl Memory for Ppu {
+impl<'a> Memory for Ppu<'a> {
     fn read(&mut self, cpu_address: u16) -> u8 {
         match cpu_address & 0x0007 {
             0 => panic!("Attempting to read from write-only ppu control register (address 0x{:04X})", cpu_address),
@@ -63,8 +67,8 @@ impl Memory for Ppu {
     }
 }
 
-impl Ppu {
-    pub fn new(tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>> ) -> Ppu {
+impl<'a> Ppu<'a> {
+    pub fn new(renderer: Renderer<'a>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu<'a> {
         Ppu {
             object_attribute_memory: vec![0;256],
             vram: Box::new(Vram::new(mirroring, rom)),
@@ -77,6 +81,7 @@ impl Ppu {
             current_scanline: 0,
             pos_at_scanline: 0,
             nmi_occured: false,
+            renderer: renderer,
         }
     }
 
@@ -203,7 +208,6 @@ impl Ppu {
 
     fn ppu_data_register_write(&mut self, value: u8) {
         let address = self.vram_address;
-        println!("Data write to address 0x{:04X}", address);
 
         self.increment_vram();
         self.vram.write(address, value);
@@ -250,7 +254,11 @@ impl Ppu {
             self.do_render();
         } else if self.current_scanline > self.tv_system.vblank_frames + rendered_scanlines
             && self.current_scanline <= self.tv_system.vblank_frames + rendered_scanlines + self.tv_system.post_render_scanlines {
-            // post render line - do nothing.
+            // post render line - do nothing ppu wise.
+            // Actually render the image
+            if self.pos_at_scanline == 0 {
+                self.renderer.render(vec![]); // placeholder
+            }
             self.dummy_scanline()
         } else {
             self.current_scanline = 0;

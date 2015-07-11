@@ -1,42 +1,78 @@
 extern crate time;
+extern crate sdl2;
+use self::sdl2::pixels::PixelFormatEnum;
 
 use memory::Memory;
 use memory_bus::*;
 use cpu::Cpu;
 use ppu::Ppu;
 use rom::read_rom;
+use ppu::renderer::Renderer;
 
 use std::rc::Rc;
 use std::cell::RefCell;
 
 #[derive(Debug)]
-pub struct Console{
+pub struct Console<'a> {
     cpu: Cpu,
     memory: Rc<RefCell<Box<Memory>>>,
-    ppu: Rc<RefCell<Ppu>>,
+    ppu: Rc<RefCell<Ppu<'a>>>,
 }
 
-impl Console {
-    pub fn new (rom_path: &str) -> Console {
+impl<'a> Console<'a> {
+
+    pub fn execute(rom_path: &str) {
+
+        /*
+            Somewhat ugly hack.
+
+            The problem here is that sdl_context must outlive the window and renderer; otherwise when
+            the context is destroyed, renderer no longer functions (window is closed) and any attempt to
+            render image will silently fail (annoying...). (Oddly enough, the sdl2 library does not enforce
+            the lifetime requirements through ownership and it's possible to have live renderer
+            object while sdl_context has already been destroyed).
+
+            Sdl_context itself is non-movable\-copyable as there are several SDL subsystems
+            that are not thread safe and as such only main thread should hold the object. However as the
+            sdl struct is private so we can't even pass it around as reference (let foo: sdl2::sdl::Sdl
+            and let foo: &sdl2::sdl::Sdl both cause a compile error. Why type inference seems to work is
+            a mystery to me at this point).
+
+            This means sdl_context must be instantiated in main and it can't be stored\passed around.
+            The required structs that depend on sdl_context are initialized here as well.
+            Ideally I'd do the initialization elsewhere but for above reasons, this seems to be impossible
+            (If I am wrong\missing something, I'd very much like to hear about this)
+
+        */
+        let sdl_context = sdl2::init().video().unwrap();
+
+        // hardcoded resolution for now. TODO: Implement arbitrary resolution & scaling
+        let window = sdl_context.window("RustNes", 256, 224)
+        .position_centered()
+        .opengl()
+        .build()
+        .unwrap();
+        let renderer = window.renderer().build().unwrap();
+
+        let renderer = Renderer::new(renderer);
+
         let rom = Box::new(read_rom(rom_path));
         let tv_system = rom.header.tv_system.clone();
         let mirroring = rom.header.mirroring.clone();
 
         let rom_mem = Rc::new(RefCell::new(rom as Box<Memory>));
-        let ppu = Rc::new(RefCell::new(Ppu::new(tv_system.clone(), mirroring, rom_mem.clone())));
+        let ppu = Rc::new(RefCell::new(Ppu::new(renderer, tv_system.clone(), mirroring, rom_mem.clone())));
 
         let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom_mem.clone(), ppu.clone())) as Box<Memory>));
-        Console {
+        let mut console = Console {
             memory: mem.clone(),
             cpu: Cpu::new(&tv_system, mem.clone()),
             ppu: ppu.clone(),
-        }
-    }
+        };
 
 
-    pub fn execute(&mut self) {
-        let cpu_cycle_time_in_nanoseconds = (1.0/(self.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
-        println!("CPU frequency: {}", self.cpu.frequency.cpu_clock_frequency);
+        let cpu_cycle_time_in_nanoseconds = (1.0/(console.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
+        println!("CPU frequency: {}", console.cpu.frequency.cpu_clock_frequency);
         println!("Cycle time in nanoseconds: {}", cpu_cycle_time_in_nanoseconds);
 
         // execute cpu_cycles_per_tick cycles every cpu_cycles_per_tick * tick_time nanoseconds.
@@ -50,7 +86,7 @@ impl Console {
         // PAL PPU executes exactly 3.2 cycles for each CPU cycle (vs exactly 3 cycles NTSC).
         // this means we need extra cycle every now an then when emulating PAL to maintaing timing
         //let mut ppu_fractional_cycles = 0.0;
-        self.cpu.reset();
+        console.cpu.reset();
 
         let mut time = time::precise_time_ns();
         loop {
@@ -60,7 +96,7 @@ impl Console {
 
             if time_taken > cpu_cycle_time_in_nanoseconds * cpu_cycles_per_tick {
                 for _ in 0..cpu_cycles_per_tick {
-                    self.run_emulation_tick();
+                    console.run_emulation_tick();
                 }
                 time = current_time;
             }

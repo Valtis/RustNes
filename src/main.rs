@@ -1,3 +1,4 @@
+
 mod console;
 mod cpu;
 mod ppu;
@@ -6,7 +7,8 @@ mod memory_bus;
 mod ram;
 mod rom;
 
+use console::Console;
+
 fn main() {
-    let mut console = console::Console::new("supermario.nes");
-    console.execute();
+    Console::execute("donkey.nes");
 }
