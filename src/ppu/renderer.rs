@@ -27,7 +27,7 @@ pub struct Renderer<'a> {
 
 impl<'a> Renderer<'a> {
     pub fn new(renderer: sdl2::render::Renderer<'a>) -> Renderer<'a> {
-        let texture = renderer.create_texture_streaming(PixelFormatEnum::IYUV, (256, 224)).unwrap();
+        let texture = renderer.create_texture_streaming(PixelFormatEnum::RGB888, (256*2, 224*2)).unwrap();
         Renderer {
             renderer: renderer,
             texture: texture,
@@ -36,37 +36,21 @@ impl<'a> Renderer<'a> {
 
     pub fn render(&mut self, pixels: Vec<Pixel>) {
         // currently just copy\paste from the SDL 2 rust examples. Will be changed in the future
-        //println!("Render");
         self.texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-            // `pitch` is the width of the Y component
-            // The U and V components are half the width and height of Y
 
-            let w = 256;
-            let h = 224;
-
-            // Set Y (constant)
-            for y in 0..h {
-                for x in 0..w {
-                    let offset = y*pitch + x;
-                    buffer[offset] = 128;
-                }
-            }
-
-            let y_size = pitch*h;
-
-            // Set U and V (X and Y)
-            for y in 0..h/2 {
-                for x in 0..w/2 {
-                    let u_offset = y_size + y*pitch/2 + x;
-                    let v_offset = y_size + (pitch/2 * h/2) + y*pitch/2 + x;
-                    buffer[u_offset] = (x*2) as u8;
-                    buffer[v_offset] = (y*2) as u8;
-                }
-            }
-        }).unwrap();
+            for y in (0..224*2) {
+                 for x in (0..256*2) {
+                     let offset = y*pitch + 4*x;
+                     buffer[offset + 0] = 255 as u8;
+                     buffer[offset + 1] = 0 as u8;
+                     buffer[offset + 2] = 0 as u8;
+                     buffer[offset + 3] = 255 as u8;
+                 }
+             }
+         }).unwrap();
 
         self.renderer.clear();
-        self.renderer.copy(&self.texture, None, Some(Rect::new_unwrap(100, 100, 256, 256)));
+        self.renderer.copy(&self.texture, None, Some(Rect::new_unwrap(100, 100, 256*2, 224*2)));
         self.renderer.present();
     }
 }

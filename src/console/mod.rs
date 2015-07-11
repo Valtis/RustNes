@@ -47,7 +47,7 @@ impl<'a> Console<'a> {
         let sdl_context = sdl2::init().video().unwrap();
 
         // hardcoded resolution for now. TODO: Implement arbitrary resolution & scaling
-        let window = sdl_context.window("RustNes", 256, 224)
+        let window = sdl_context.window("RustNes", 1024, 768)
         .position_centered()
         .opengl()
         .build()
