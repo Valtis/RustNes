@@ -69,11 +69,11 @@ impl Memory for Vram {
         } else if address >= 0x2000 && address < 0x3F00 { // read from nametable
             let mem_address = self.get_nametable_address(address);
             self.memory[mem_address]
-        } else if address >= 0x3F00 && address <= 0x3FFF { // read from palette memory
+        } else if address >= 0x3F00 && address <= 0x3FFF { // read from palette memory        
             let palette_address = self.get_palette_address(address);
             self.palette_memory[palette_address]
         } else {
-            panic!("Read from PPU address 0x{:04X} is not implemented yet!", address);
+            self.read(address - 0x4000)
         }
     }
 
@@ -85,9 +85,10 @@ impl Memory for Vram {
             self.memory[mem_address] = value;
         } else if address >= 0x3F00 && address <= 0x3FFF { // write to palette memory
             let palette_address = self.get_palette_address(address);
+           
             self.palette_memory[palette_address] = value;
         }  else {
-            panic!("Write to PPU address 0x{:04X} is not implemented yet!", address);
+            self.write(address - 0x4000, value);
         }
 
     }

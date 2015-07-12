@@ -1,25 +1,29 @@
 extern crate time;
 extern crate sdl2;
 use self::sdl2::pixels::PixelFormatEnum;
+use self::sdl2::keyboard::Keycode;
+use self::sdl2::event::Event;
 
 use memory::Memory;
 use memory_bus::*;
 use cpu::Cpu;
 use ppu::Ppu;
 use rom::read_rom;
-use ppu::renderer::Renderer;
+use ppu::renderer::*;
 
 use std::rc::Rc;
 use std::cell::RefCell;
 
+
+
 #[derive(Debug)]
-pub struct Console<'a> {
+pub struct Console {
     cpu: Cpu,
     memory: Rc<RefCell<Box<Memory>>>,
-    ppu: Rc<RefCell<Ppu<'a>>>,
+    ppu: Rc<RefCell<Ppu>>,
 }
 
-impl<'a> Console<'a> {
+impl Console {
 
     pub fn execute(rom_path: &str) {
 
@@ -44,24 +48,28 @@ impl<'a> Console<'a> {
             (If I am wrong\missing something, I'd very much like to hear about this)
 
         */
-        let sdl_context = sdl2::init().video().unwrap();
+        let mut sdl_context = sdl2::init().video().unwrap();
+       
 
         // hardcoded resolution for now. TODO: Implement arbitrary resolution & scaling
-        let window = sdl_context.window("RustNes", 1024, 768)
+        let window = sdl_context.window("RustNes", 256*2, 240*2)
         .position_centered()
         .opengl()
         .build()
         .unwrap();
         let renderer = window.renderer().build().unwrap();
 
-        let renderer = Renderer::new(renderer);
+        let renderer = SDLRenderer::new(renderer);
 
         let rom = Box::new(read_rom(rom_path));
+        
+        println!("{:?}", rom.header);
+        
         let tv_system = rom.header.tv_system.clone();
         let mirroring = rom.header.mirroring.clone();
 
         let rom_mem = Rc::new(RefCell::new(rom as Box<Memory>));
-        let ppu = Rc::new(RefCell::new(Ppu::new(renderer, tv_system.clone(), mirroring, rom_mem.clone())));
+        let ppu = Rc::new(RefCell::new(Ppu::new(Box::new(renderer), tv_system.clone(), mirroring, rom_mem.clone())));
 
         let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom_mem.clone(), ppu.clone())) as Box<Memory>));
         let mut console = Console {
@@ -89,7 +97,7 @@ impl<'a> Console<'a> {
         console.cpu.reset();
 
         let mut time = time::precise_time_ns();
-        loop {
+        'main_loop: loop {
             let current_time = time::precise_time_ns();
             let time_taken = current_time - time;
 
@@ -99,6 +107,18 @@ impl<'a> Console<'a> {
                     console.run_emulation_tick();
                 }
                 time = current_time;
+            }
+
+            // TEMPORARY. Poll events so t hat window doesn't freeze
+
+            for event in sdl_context.event_pump().poll_iter() {
+
+                match event {
+                    Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                        break 'main_loop;
+                    },
+                    _ => {}
+                }
             }
 
         }

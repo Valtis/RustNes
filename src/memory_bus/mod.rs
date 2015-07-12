@@ -4,14 +4,14 @@ use ppu::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-pub struct MemoryBus<'a> {
+pub struct MemoryBus {
     rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
-    ppu: Rc<RefCell<Ppu<'a>>>,
+    ppu: Rc<RefCell<Ppu>>,
     // TODO: APU, controllers
 }
 
-impl<'a> Memory for MemoryBus<'a> {
+impl Memory for MemoryBus {
     fn read(&mut self, address: u16) -> u8 {
         if address < 0x2000 {
             self.ram.read(address)
@@ -46,7 +46,7 @@ impl<'a> Memory for MemoryBus<'a> {
 
 }
 
-impl<'a> MemoryBus<'a> {
+impl MemoryBus {
     pub fn new(rom: Rc<RefCell<Box<Memory>>>, ppu: Rc<RefCell<Ppu>>) -> MemoryBus  {
         MemoryBus {
             rom: rom,
@@ -63,12 +63,25 @@ mod tests {
     use memory::*;
     use ppu::*;
     use rom::*;
+    use ppu::renderer::*;
     use std::cell::RefCell;
     use std::rc::Rc;
+   
     // 64 kilobytes of memory, no mapped addresses
+   
+    struct MockRenderer;
 
-    // TODO: Figure out how to cleanly unit test PPU read\writes
+    impl MockRenderer {
+        fn new() -> MockRenderer {
+            MockRenderer
+        }
+    }
 
+    impl Renderer for MockRenderer {
+        fn render(&mut self, pixels: &Vec<Pixel>) {
+
+        }
+    }
     struct MockMemory {
         memory: Vec<u8>
     }
@@ -109,7 +122,7 @@ mod tests {
         MemoryBus {
             rom: rom.clone(),
             ram: Box::new(MockMemory::new()),
-            ppu: Rc::new(RefCell::new(Ppu::new(TvSystem::NTSC, Mirroring::VerticalMirroring, rom.clone()))),
+            ppu: Rc::new(RefCell::new(Ppu::new(Box::new(MockRenderer::new()), TvSystem::NTSC, Mirroring::VerticalMirroring, rom.clone()))),
         }
     }
 

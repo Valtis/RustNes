@@ -85,7 +85,7 @@ impl Cpu {
         let pc = self.program_counter;
         let instruction = self.read(pc);
 
-        /*println!("{:04X} Opcode:{:02X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
+      /*  println!("{:04X} Opcode:{:02X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
             self.program_counter,
             instruction,
             self.a,

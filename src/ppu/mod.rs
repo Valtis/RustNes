@@ -8,12 +8,33 @@ use rom::*;
 use self::vram::Vram;
 use self::tv_system_values::TvSystemValues;
 use self::renderer::Renderer;
+use self::renderer::Pixel;
 
 use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-pub struct Ppu<'a> {
+static PALETTE: [u8; 192] = [
+    124,124,124,    0,0,252,        0,0,188,        68,40,188,
+    148,0,132,      168,0,32,       168,16,0,       136,20,0,
+    80,48,0,        0,120,0,        0,104,0,        0,88,0,
+    0,64,88,        0,0,0,          0,0,0,          0,0,0,
+    188,188,188,    0,120,248,      0,88,248,       104,68,252,
+    216,0,204,      228,0,88,       248,56,0,       228,92,16,
+    172,124,0,      0,184,0,        0,168,0,        0,168,68,
+    0,136,136,      0,0,0,          0,0,0,          0,0,0,
+    248,248,248,    60,188,252,     104,136,252,    152,120,248,
+    248,120,248,    248,88,152,     248,120,88,     252,160,68,
+    248,184,0,      184,248,24,     88,216,84,      88,248,152,
+    0,232,216,      120,120,120,    0,0,0,          0,0,0,
+    252,252,252,    164,228,252,    184,184,248,    216,184,248,
+    248,184,248,    248,164,192,    240,208,176,    252,224,168,
+    248,216,120,    216,248,120,    184,248,184,    184,248,216,
+    0,252,252,      248,216,248,    0,0,0,          0,0,0
+];
+
+
+pub struct Ppu {
     object_attribute_memory: Vec<u8>,
     vram: Box<Memory>,
     registers: Registers,
@@ -25,19 +46,25 @@ pub struct Ppu<'a> {
     current_scanline: u16,
     pos_at_scanline: u16,
     nmi_occured: bool,
-    renderer: Renderer<'a>,
+    name_table_byte: u8,
+    attribute_table_byte: u8,
+    pattern_table_low_byte: u8,
+    pattern_table_high_byte: u8,
+    background_data: u64,
+    pixels: Vec<Pixel>,
+    renderer: Box<Renderer>,
 }
 
 
 
-impl<'a> fmt::Debug for Ppu<'a> {
+impl fmt::Debug for Ppu{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{:?}", self.registers));
         write!(f, "<Memory contents not included>")
     }
 }
 
-impl<'a> Memory for Ppu<'a> {
+impl Memory for Ppu {
     fn read(&mut self, cpu_address: u16) -> u8 {
         match cpu_address & 0x0007 {
             0 => panic!("Attempting to read from write-only ppu control register (address 0x{:04X})", cpu_address),
@@ -67,8 +94,8 @@ impl<'a> Memory for Ppu<'a> {
     }
 }
 
-impl<'a> Ppu<'a> {
-    pub fn new(renderer: Renderer<'a>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu<'a> {
+impl Ppu {
+    pub fn new(renderer: Box<Renderer>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
             vram: Box::new(Vram::new(mirroring, rom)),
@@ -81,6 +108,12 @@ impl<'a> Ppu<'a> {
             current_scanline: 0,
             pos_at_scanline: 0,
             nmi_occured: false,
+            name_table_byte: 0,
+            attribute_table_byte: 0,
+            pattern_table_low_byte: 0,
+            pattern_table_high_byte: 0,
+            background_data: 0,
+            pixels: vec![Pixel::new(0,0,0);240*256],
             renderer: renderer,
         }
     }
@@ -141,9 +174,7 @@ impl<'a> Ppu<'a> {
             t is the 15 bit temporary register
         */
             self.fine_x_scroll = value & 0x07;
-            self.registers.temporary = self.registers.temporary & 0xFFE0; // clear bits
-            self.registers.temporary = self.registers.temporary | ((value & 0xF8) as u16) >> 3;
-
+            self.registers.temporary = (self.registers.temporary & 0xFFE0) | (value as u16) >> 3; // clear bits
         } else {
         /*
             $2005 second write (w is 1)
@@ -180,7 +211,7 @@ impl<'a> Ppu<'a> {
                 t: ....... HGFEDCBA = d: HGFEDCBA
                 v                   = t
                 w:                  = 0
-                As above. V is the vram address register
+                As above. v is the vram address register
             */
             self.registers.temporary = self.registers.temporary & 0xFF00; // clear low 8 bytes
             self.registers.temporary = self.registers.temporary | value as u16;
@@ -190,7 +221,7 @@ impl<'a> Ppu<'a> {
     }
 
     fn ppu_data_register_read(&mut self) -> u8 {
-        let address = self.vram_address;
+        let address = self.vram_address & 0x7FFF;
         self.increment_vram();
 
         if address <= 0x3EFF {
@@ -243,6 +274,10 @@ impl<'a> Ppu<'a> {
         }
     }
 
+    fn rendering_enabled(&mut self) -> bool {
+        (self.registers.mask & 0x18) != 0
+    }
+
     fn execute_cycle(&mut self) {
         let rendered_scanlines = 240;
         if self.current_scanline < self.tv_system.vblank_frames {
@@ -257,9 +292,9 @@ impl<'a> Ppu<'a> {
             // post render line - do nothing ppu wise.
             // Actually render the image
             if self.pos_at_scanline == 0 {
-                self.renderer.render(vec![]); // placeholder
+                self.renderer.render(&self.pixels); // placeholder
             }
-            self.dummy_scanline()
+            self.update_scanline_pos()
         } else {
             self.current_scanline = 0;
             self.execute_cycle(); // start executing from beginning again
@@ -273,17 +308,30 @@ impl<'a> Ppu<'a> {
             self.registers.status = self.registers.status | 0x80;
             self.generate_nmi_if_flags_set();
         }
-        self.dummy_scanline();
+        self.update_scanline_pos();
     }
 
     fn do_pre_render_line(&mut self) {
         if self.pos_at_scanline == 1 { // unset vblank flag on second tick
             self.registers.status = self.registers.status & 0x7F;
         }
-        self.dummy_scanline();
+
+        if self.rendering_enabled() {
+
+            if (self.pos_at_scanline >=1 && self.pos_at_scanline <= 256) || (self.pos_at_scanline >= 321 && self.pos_at_scanline <= 336) {
+                self.do_memory_access();
+                self.update_registers();
+            }
+
+            // reset scroll values
+            if self.pos_at_scanline >= 280 && self.pos_at_scanline <= 304 && self.rendering_enabled() {
+                self.update_y_scroll();
+            }
+        }
+        self.update_scanline_pos();
     }
 
-    fn dummy_scanline(&mut self) {
+    fn update_scanline_pos(&mut self) {
         self.pos_at_scanline += 1;
         if self.pos_at_scanline == 340 {
             self.pos_at_scanline = 0;
@@ -292,13 +340,196 @@ impl<'a> Ppu<'a> {
     }
 
     fn do_render(&mut self) {
+        if !self.rendering_enabled() {
+            self.update_scanline_pos();
+            // do nothing if rendering is not enabled
+            return;
+        }
+
+      /*  let mut outer = 0x2000;
+
+        while outer < 0x2400 {
+
+            print!("0x{:04X}:", outer);
+
+            let mut inner = 0x00;
+            while inner < 0x10 {
+                if inner % 4 == 0 {
+                    print!(" ");
+                }
+                print!("{:02X} ", self.vram.read(outer + inner));
+                inner += 1;
+            }
+            println!("");
+            outer += 0x010;
+        }
+
+        panic!("Done");*/
+
         if self.pos_at_scanline == 0 {
             // idle cycle
+        } else if self.pos_at_scanline <= 256 {
+            self.render_pixel();
+            self.do_memory_access();
+            self.update_registers();
+        } else if self.pos_at_scanline <= 320 {
+        } else if self.pos_at_scanline <= 336 {
+            self.do_memory_access();
+            self.update_registers();
         } else {
 
         }
 
-        self.dummy_scanline();
+        self.update_scanline_pos();
+    }
+
+    fn do_memory_access(&mut self) {
+         self.background_data = self.background_data << 4; // shift data for next pixel rendering
+         match self.pos_at_scanline & 0x07 {
+            0 => {
+                self.update_buffers();
+                self.update_vram_x();
+            },
+            1 => self.read_nametable_byte(),
+            3 => self.read_attribute_byte(),
+            5 => self.read_pattern_table_low_byte(),
+            7 => self.read_pattern_table_high_byte(),
+            _ => {} // do nothing
+        }
+    }
+
+    // copy data that have been read to render buffer
+
+
+    fn update_buffers(&mut self) {
+        let mut data:u32 = 0;
+
+        let mut sanity_check = self.background_data;
+
+
+    	let mut temp: u32 = 0;
+    	for i in 0..8 {
+    		// get palette from low\high bytes (these are split into separate bytes for
+            // reasons I do not understand; must have been hardware constraint back in the 80's)
+
+            // bit 0
+    		let mut palette = ((self.pattern_table_low_byte << i) & 0x80) >> 7;
+            // and bit 1
+    		palette = palette | ((self.pattern_table_high_byte << i) & 0x80) >> 6;
+
+    		temp = (temp << 4) | self.attribute_table_byte as u32 | palette as u32;
+    	}
+
+    	self.background_data = self.background_data | temp as u64;
+    }
+
+    fn update_registers(&mut self) {
+        if self.pos_at_scanline == 256 {
+            self.update_vram_y();
+        } else if self.pos_at_scanline == 257 {
+            self.update_x_scroll();
+        }
+    }
+
+    fn read_nametable_byte(&mut self) {
+        let address = 0x2000 | self.vram_address & 0x0FFF;
+        self.name_table_byte = self.vram.read(address);
+    }
+    /*
+        address can be interpreted as follows
+
+            yyy NN YYYYY XXXXX
+            ||| || ||||| +++++-- coarse X scroll
+            ||| || +++++-------- coarse Y scroll
+            ||| ++-------------- nametable select
+            +++----------------- fine Y scroll
+    */
+
+    fn read_attribute_byte(&mut self) {
+        // each attribute table is stored in the final 64 bytes of a nametable
+        // 0x23C0 is the location of the first attribute table.
+        // correct attribute table is then selected by doing some bit manipulation to the vram address
+        let attribute_address = 0x23C0 | (self.vram_address & 0x0C00) | ((self.vram_address >> 4) & 0x38) | ((self.vram_address >> 2) & 0x07);
+        let shift = ((self.vram_address >> 4) & 4) | (self.vram_address & 2);
+        self.attribute_table_byte = ((self.vram.read(attribute_address) >> shift) & 3) << 2
+    }
+
+    fn calculate_pattern_table_address(&mut self) -> u16 {
+        // get fine y bits from vram address (bits 12, 13 & 14)
+        let fine_y = (self.vram_address >> 12) & 0x07;
+        // select correct pattern table (if bit 4 at control is 0 -> table at 0x000, 1 -> table at 0x1000)
+        let table = 0x1000 * (((self.registers.control as u16) & 0x10) >> 4);
+        // attribute byte selects tile in pattern table; tile is 16 bytes
+        table + (self.attribute_table_byte as u16)*16 + fine_y
+    }
+
+    fn read_pattern_table_low_byte(&mut self) {
+        let address = self.calculate_pattern_table_address();
+        self.pattern_table_low_byte = self.vram.read(address);
+    }
+
+    fn read_pattern_table_high_byte(&mut self) {
+        let address = self.calculate_pattern_table_address() + 8; // offset for high byte
+        self.pattern_table_high_byte = self.vram.read(address);
+    }
+
+    fn render_pixel(&mut self) {
+        // for now, only background rendering.
+
+        let y = self.current_scanline as usize - self.tv_system.vblank_frames as usize - 1; // - 1 for pre-render-line
+        let x = self.pos_at_scanline as usize - 1; // - 1 for the skipped cycle
+
+        // if background rendering is disabled, blank the pixel
+        if self.registers.mask & 0x08 == 0 {
+            self.pixels[y*256 + x] = Pixel::new(0, 0, 0);
+            return;
+        }
+
+        let background = (((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4) & 0x0F) as u8;
+
+        let mut palette_index = if background  %4 != 0 {
+            (self.vram.read(background as u16) & 0x3F) as usize
+        } else {
+           0
+        };
+        let color_index = (self.vram.read(0x3F00 + palette_index as u16) % 64) as usize;
+
+        self.pixels[y*256 + x] = Pixel::new(PALETTE[color_index*3], PALETTE[color_index*3 + 1], PALETTE[color_index*3 + 2]);
+    }
+
+    fn update_vram_x(&mut self) {
+    	if self.vram_address & 0x001F == 31 {
+    		self.vram_address =  self.vram_address & 0xFFE0;
+    		self.vram_address = self.vram_address ^ 0x0400;
+    	} else {
+    		self.vram_address += 1;
+    	}
+    }
+
+    fn update_vram_y(&mut self) {
+        if self.vram_address & 0x7000 == 0 {
+    		 self.vram_address = self.vram_address & 0x0FFF;
+
+    		let mut y = (self.vram_address & 0x03E0) >> 5;
+    		if y == 29 {
+                self.vram_address = self.vram_address & !0x03e0;
+    			self.vram_address = self.vram_address ^ 0x0800;
+    		} else if y == 31 {
+			     self.vram_address = self.vram_address & !0x03e0;
+    		} else {
+    			self.vram_address += 0x20;
+    		}
+    	} else {
+            self.vram_address += 0x1000;
+    	}
+    }
+
+    fn update_x_scroll(&mut self) {
+	   self.vram_address = (self.vram_address & 0xFBE0) | (self.registers.temporary & 0x041F)
+    }
+
+    fn update_y_scroll(&mut self) {
+        self.vram_address = (self.vram_address & 0x841F) | (self.registers.temporary & 0x7BE0);
     }
 }
 
@@ -332,7 +563,7 @@ mod tests {
     use rom::*;
     use std::rc::Rc;
     use std::cell::RefCell;
-
+    use super::renderer::*;
     struct MockMemory {
         memory: Vec<u8>
     }
@@ -355,9 +586,23 @@ mod tests {
         }
     }
 
+    struct MockRenderer;
+
+    impl MockRenderer {
+        fn new() -> MockRenderer {
+            MockRenderer
+        }
+    }
+
+    impl Renderer for MockRenderer {
+        fn render(&mut self, pixels: &Vec<Pixel>) {
+
+        }
+    }
+
     fn create_test_ppu() -> Ppu {
         let rom = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
-        let mut ppu = Ppu::new(TvSystem::NTSC, Mirroring::VerticalMirroring, rom);
+        let mut ppu = Ppu::new(Box::new(MockRenderer::new()), TvSystem::NTSC, Mirroring::VerticalMirroring, rom);
         // replace vram with mock
         ppu.vram = Box::new(MockMemory::new());
         ppu
