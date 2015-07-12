@@ -346,9 +346,9 @@ impl Ppu {
             return;
         }
 
-      /*  let mut outer = 0x2000;
+        /*let mut outer = 0x0000;
 
-        while outer < 0x2400 {
+        while outer < 0x4000 {
 
             print!("0x{:04X}:", outer);
 
@@ -365,7 +365,11 @@ impl Ppu {
         }
 
         panic!("Done");*/
-
+        println!("Scanline: {:03}\tPos at scanline: {:03}, vram_address: ${:04X}",
+        self.current_scanline,
+        self.pos_at_scanline,
+        self.vram_address
+        );
         if self.pos_at_scanline == 0 {
             // idle cycle
         } else if self.pos_at_scanline <= 256 {
@@ -432,7 +436,9 @@ impl Ppu {
     }
 
     fn read_nametable_byte(&mut self) {
+        let temp_address = self.vram_address;
         let address = 0x2000 | self.vram_address & 0x0FFF;
+        println!("Temp address: ${:04X} read address: ${:04X}\n", temp_address, address);
         self.name_table_byte = self.vram.read(address);
     }
     /*
@@ -506,29 +512,38 @@ impl Ppu {
     	}
     }
 
-    fn update_vram_y(&mut self) {
-        if self.vram_address & 0x7000 == 0 {
-    		 self.vram_address = self.vram_address & 0x0FFF;
 
-    		let mut y = (self.vram_address & 0x03E0) >> 5;
-    		if y == 29 {
-                self.vram_address = self.vram_address & !0x03e0;
-    			self.vram_address = self.vram_address ^ 0x0800;
-    		} else if y == 31 {
-			     self.vram_address = self.vram_address & !0x03e0;
-    		} else {
-    			self.vram_address += 0x20;
-    		}
-    	} else {
-            self.vram_address += 0x1000;
-    	}
+    // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Y_increment
+    // Implementation directly from nesdev wiki with only necessary changes to make it compile. 
+    // Commments preserved
+    
+    // Executed every 256 pixel on (pre)render scanlines if rendering is enabled
+    fn update_vram_y(&mut self) {
+        if (self.vram_address & 0x7000) != 0x7000 {        // if fine Y < 7
+            self.vram_address += 0x1000;                      // increment fine Y
+        }
+        else {
+            self.vram_address &= !0x7000;                     // fine Y = 0
+            let mut y = (self.vram_address & 0x03E0) >> 5;        // let y = coarse Y
+            if y == 29 {
+                y = 0;                          // coarse Y = 0
+                self.vram_address ^= 0x0800;                    // switch vertical nametable
+            } else if (y == 31) {
+                y = 0;                          // coarse Y = 0, nametable not switched
+            } else {
+                y += 1;
+            }                         // increment coarse Y
+            self.vram_address = (self.vram_address & !0x03E0) | (y << 5);     // put coarse Y back into v
+        }
     }
 
     fn update_x_scroll(&mut self) {
-	   self.vram_address = (self.vram_address & 0xFBE0) | (self.registers.temporary & 0x041F)
+       //  v: ....F.. ...EDCBA = t: ....F.. ...EDCBA       
+	   self.vram_address = (self.vram_address & 0xFBE0) | (self.registers.temporary & 0x041F);
     }
 
     fn update_y_scroll(&mut self) {
+        // v: IHGF.ED CBA..... = t: IHGF.ED CBA.....
         self.vram_address = (self.vram_address & 0x841F) | (self.registers.temporary & 0x7BE0);
     }
 }
