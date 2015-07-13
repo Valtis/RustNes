@@ -50,7 +50,6 @@ impl<'a> SDLRenderer<'a> {
 
 impl<'a> Renderer for SDLRenderer<'a> {
     fn render(&mut self, pixels: &Vec<Pixel>) {
-       // println!("Render");
         self.texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
 
             for y in (0..240) {

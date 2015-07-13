@@ -294,11 +294,9 @@ impl Ppu {
             if self.pos_at_scanline == 0 {
                 self.renderer.render(&self.pixels); // placeholder
             }
-            self.update_scanline_pos()
-        } else {
-            self.current_scanline = 0;
-            self.execute_cycle(); // start executing from beginning again
         }
+        
+        self.update_scanline_pos();
     }
 
     fn do_vblank(&mut self) {
@@ -308,7 +306,6 @@ impl Ppu {
             self.registers.status = self.registers.status | 0x80;
             self.generate_nmi_if_flags_set();
         }
-        self.update_scanline_pos();
     }
 
     fn do_pre_render_line(&mut self) {
@@ -328,7 +325,6 @@ impl Ppu {
                 self.update_y_scroll();
             }
         }
-        self.update_scanline_pos();
     }
 
     fn update_scanline_pos(&mut self) {
@@ -336,12 +332,14 @@ impl Ppu {
         if self.pos_at_scanline == 340 {
             self.pos_at_scanline = 0;
             self.current_scanline += 1;
+            if self.current_scanline > 261 {
+                self.current_scanline = 0;
+            }
         }
     }
 
     fn do_render(&mut self) {
         if !self.rendering_enabled() {
-            self.update_scanline_pos();
             // do nothing if rendering is not enabled
             return;
         }
@@ -365,26 +363,34 @@ impl Ppu {
         }
 
         panic!("Done");*/
-        println!("Scanline: {:03}\tPos at scanline: {:03}, vram_address: ${:04X}",
+      /*  println!("Scanline: {:03}\tPos at scanline: {:03}, vram_address: ${:04X}",
         self.current_scanline,
         self.pos_at_scanline,
         self.vram_address
-        );
+        );*/
         if self.pos_at_scanline == 0 {
             // idle cycle
         } else if self.pos_at_scanline <= 256 {
             self.render_pixel();
             self.do_memory_access();
+            
+            if self.pos_at_scanline % 8 == 0 {            
+                self.update_vram_x();
+            }
             self.update_registers();
+        
+                
         } else if self.pos_at_scanline <= 320 {
         } else if self.pos_at_scanline <= 336 {
             self.do_memory_access();
-            self.update_registers();
+            if self.pos_at_scanline % 8 == 0 {            
+                self.update_vram_x();
+            }
+            self.update_registers();  
+        
         } else {
-
+            
         }
-
-        self.update_scanline_pos();
     }
 
     fn do_memory_access(&mut self) {
@@ -392,7 +398,7 @@ impl Ppu {
          match self.pos_at_scanline & 0x07 {
             0 => {
                 self.update_buffers();
-                self.update_vram_x();
+              //  self.update_vram_x();
             },
             1 => self.read_nametable_byte(),
             3 => self.read_attribute_byte(),
@@ -406,11 +412,6 @@ impl Ppu {
 
 
     fn update_buffers(&mut self) {
-        let mut data:u32 = 0;
-
-        let mut sanity_check = self.background_data;
-
-
     	let mut temp: u32 = 0;
     	for i in 0..8 {
     		// get palette from low\high bytes (these are split into separate bytes for
@@ -435,10 +436,10 @@ impl Ppu {
         }
     }
 
+
+    // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
     fn read_nametable_byte(&mut self) {
-        let temp_address = self.vram_address;
-        let address = 0x2000 | self.vram_address & 0x0FFF;
-        println!("Temp address: ${:04X} read address: ${:04X}\n", temp_address, address);
+        let address = 0x2000 | (self.vram_address & 0x0FFF);
         self.name_table_byte = self.vram.read(address);
     }
     /*
@@ -457,7 +458,7 @@ impl Ppu {
         // correct attribute table is then selected by doing some bit manipulation to the vram address
         let attribute_address = 0x23C0 | (self.vram_address & 0x0C00) | ((self.vram_address >> 4) & 0x38) | ((self.vram_address >> 2) & 0x07);
         let shift = ((self.vram_address >> 4) & 4) | (self.vram_address & 2);
-        self.attribute_table_byte = ((self.vram.read(attribute_address) >> shift) & 3) << 2
+        self.attribute_table_byte = ((self.vram.read(attribute_address) >> shift) & 3) << 2;
     }
 
     fn calculate_pattern_table_address(&mut self) -> u16 {
@@ -465,8 +466,8 @@ impl Ppu {
         let fine_y = (self.vram_address >> 12) & 0x07;
         // select correct pattern table (if bit 4 at control is 0 -> table at 0x000, 1 -> table at 0x1000)
         let table = 0x1000 * (((self.registers.control as u16) & 0x10) >> 4);
-        // attribute byte selects tile in pattern table; tile is 16 bytes
-        table + (self.attribute_table_byte as u16)*16 + fine_y
+        // attribute byte sele   cts tile in pattern table; tile is 16 bytes
+        table + (self.name_table_byte as u16)*16 + fine_y
     }
 
     fn read_pattern_table_low_byte(&mut self) {
@@ -491,22 +492,24 @@ impl Ppu {
             return;
         }
 
-        let background = (((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4) & 0x0F) as u8;
-
-        let mut palette_index = if background  %4 != 0 {
-            (self.vram.read(background as u16) & 0x3F) as usize
+        let background = ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8;
+        
+        let mut palette_index = if background  % 4 == 0 {
+            0
         } else {
-           0
+            background
         };
-        let color_index = (self.vram.read(0x3F00 + palette_index as u16) % 64) as usize;
+        
+        let color_index = (self.vram.read(0x3F00 + background as u16) % 64) as usize;
 
         self.pixels[y*256 + x] = Pixel::new(PALETTE[color_index*3], PALETTE[color_index*3 + 1], PALETTE[color_index*3 + 2]);
     }
-
+    
+    // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Coarse_X_increment
     fn update_vram_x(&mut self) {
-    	if self.vram_address & 0x001F == 31 {
-    		self.vram_address =  self.vram_address & 0xFFE0;
-    		self.vram_address = self.vram_address ^ 0x0400;
+    	if self.vram_address & 0x001F == 31 {                    
+            self.vram_address &= !0x001F;          // coarse X = 0
+            self.vram_address ^= 0x0400;           // switch horizontal nametable
     	} else {
     		self.vram_address += 1;
     	}
@@ -519,7 +522,7 @@ impl Ppu {
     
     // Executed every 256 pixel on (pre)render scanlines if rendering is enabled
     fn update_vram_y(&mut self) {
-        if (self.vram_address & 0x7000) != 0x7000 {        // if fine Y < 7
+         if (self.vram_address & 0x7000) != 0x7000 {        // if fine Y < 7
             self.vram_address += 0x1000;                      // increment fine Y
         }
         else {
@@ -528,7 +531,7 @@ impl Ppu {
             if y == 29 {
                 y = 0;                          // coarse Y = 0
                 self.vram_address ^= 0x0800;                    // switch vertical nametable
-            } else if (y == 31) {
+            } else if y == 31 {
                 y = 0;                          // coarse Y = 0, nametable not switched
             } else {
                 y += 1;
