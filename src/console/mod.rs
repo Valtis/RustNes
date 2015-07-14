@@ -1,6 +1,5 @@
 extern crate time;
 extern crate sdl2;
-use self::sdl2::pixels::PixelFormatEnum;
 use self::sdl2::keyboard::Keycode;
 use self::sdl2::event::Event;
 

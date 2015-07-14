@@ -2,7 +2,6 @@ extern crate sdl2;
 use std::fmt;
 use self::sdl2::pixels::PixelFormatEnum;
 use self::sdl2::rect::Rect;
-use self::sdl2::keyboard::Keycode;
 
 #[derive(Clone, Debug)]
 pub struct Pixel {

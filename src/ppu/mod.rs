@@ -297,8 +297,6 @@ impl Ppu {
                 self.renderer.render(&self.pixels); // placeholder
             }
         }
-        
- 
   
         self.update_scanline_pos();
     }
@@ -395,8 +393,6 @@ impl Ppu {
     }
 
     // copy data that have been read to render buffer
-
-
     fn update_buffers(&mut self) {
     	let mut temp: u32 = 0;
     	for i in 0..8 {
@@ -460,8 +456,8 @@ impl Ppu {
     fn render_pixel(&mut self) {
         // for now, only background rendering.
 
-        let mut y = self.current_scanline - self.tv_system.vblank_frames - 1; // - 1 for pre-render-line
-        let mut x = self.pos_at_scanline - 1; // - 1 for the skipped cycle
+        let y = self.current_scanline - self.tv_system.vblank_frames - 1; // - 1 for pre-render-line
+        let x = self.pos_at_scanline - 1; // - 1 for the skipped cycle
  
         let index = y as usize*256 + x as usize;
         // if background rendering is disabled, blank the pixel
@@ -478,7 +474,7 @@ impl Ppu {
             background
         };
         
-        let color_index = (self.vram.read(0x3F00 + background as u16) % 64) as usize;
+        let color_index = (self.vram.read(0x3F00 + palette_index as u16) % 64) as usize;
 
         self.pixels[index] = Pixel::new(PALETTE[color_index*3], PALETTE[color_index*3 + 1], PALETTE[color_index*3 + 2]);
     }
