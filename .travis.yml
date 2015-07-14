@@ -1,6 +1,8 @@
 language: rust
 install:
-  sudo ./install-sdl2.sh
+  curl -O https://www.libsdl.org/release/SDL2-2.0.3.tar.gz
+  tar -xzvf SDL2-2.0.3.tar.gz
+  (cd SDL2-2.0.3 && ./configure && make && sudo make install)
 after_success: |
   sudo apt-get install libcurl4-openssl-dev libelf-dev libdw-dev &&
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
