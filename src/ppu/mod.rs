@@ -274,10 +274,17 @@ impl Ppu {
         }
     }
 
-    fn rendering_enabled(&mut self) -> bool {
-        (self.registers.mask & 0x18) != 0
+    fn update_scanline_pos(&mut self) {
+        self.pos_at_scanline += 1;
+        if self.pos_at_scanline == 340 {
+            self.pos_at_scanline = 0;
+            self.current_scanline += 1;
+            if self.current_scanline > 261 {
+                self.current_scanline = 0;
+            }
+        }
     }
-
+    
     fn execute_cycle(&mut self) {
 
         let rendered_scanlines = 240;
@@ -296,10 +303,16 @@ impl Ppu {
             if self.pos_at_scanline == 0 {
                 self.renderer.render(&self.pixels); // placeholder
             }
-        }
-  
+        }        
+        
         self.update_scanline_pos();
     }
+
+    
+    fn rendering_enabled(&mut self) -> bool {
+        (self.registers.mask & 0x18) != 0
+    }
+    
 
     fn do_vblank(&mut self) {
         // VBLANK - do not access memory or render.
@@ -323,31 +336,18 @@ impl Ppu {
             
             if self.pos_at_scanline == 256 {
                 self.increment_vram_y();
-            } 
-        
-            if self.pos_at_scanline == 257  {
+            } else if self.pos_at_scanline == 257  {
                 self.update_x_scroll();
-            }
+            } 
             
             // reset scroll values
             if self.pos_at_scanline >= 280 && self.pos_at_scanline <= 304 && self.rendering_enabled() {
                 self.update_y_scroll();
             }
         }
-            
-       // self.update_registers();
     }
 
-    fn update_scanline_pos(&mut self) {
-        self.pos_at_scanline += 1;
-        if self.pos_at_scanline == 340 {
-            self.pos_at_scanline = 0;
-            self.current_scanline += 1;
-            if self.current_scanline > 261 {
-                self.current_scanline = 0;
-            }
-        }
-    }
+
 
     fn do_render(&mut self) {
         if !self.rendering_enabled() {
@@ -368,11 +368,10 @@ impl Ppu {
         } else if self.pos_at_scanline <= 336 {
             self.do_memory_access();                         
         } 
-        
+       
         if self.pos_at_scanline == 257  {
             self.update_x_scroll();
         }
-            
     }
 
     fn do_memory_access(&mut self) {
@@ -466,12 +465,21 @@ impl Ppu {
             return;
         }
 
-        let background = ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8;
-        
-        let palette_index = if background  % 4 == 0 {
+        let background = if self.registers.mask & 0x02 == 0 && x < 8 { // background rendering disabled for first 8 pixels
             0
-        } else {
+        } else { 
+            ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8
+        };
+        
+        let sprite = 0; // placeholder
+        let background_index = background  % 4;
+        
+        let palette_index = if background_index == 0 && sprite == 0 {
+            0
+        } else if sprite == 0 && background_index != 0 {
             background
+        } else {
+            background // PLACEHOLDER
         };
         
         let color_index = (self.vram.read(0x3F00 + palette_index as u16) % 64) as usize;
@@ -1106,6 +1114,5 @@ mod tests {
         ppu.nmi_occured();
         assert_eq!(false, ppu.nmi_occured);
     }
-
 
 }
