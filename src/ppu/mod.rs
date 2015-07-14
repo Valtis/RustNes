@@ -279,23 +279,27 @@ impl Ppu {
     }
 
     fn execute_cycle(&mut self) {
+
         let rendered_scanlines = 240;
+        
+        let render_end = self.tv_system.vblank_frames + rendered_scanlines;
+        let post_render_end = render_end + self.tv_system.post_render_scanlines;
+        
         if self.current_scanline < self.tv_system.vblank_frames {
-            self.do_vblank();
+            self.do_vblank();       
         } else if self.current_scanline == self.tv_system.vblank_frames {
             self.do_pre_render_line();
-        } else if self.current_scanline > self.tv_system.vblank_frames
-            && self.current_scanline <= self.tv_system.vblank_frames + rendered_scanlines {
+        } else if self.current_scanline <= render_end {
             self.do_render();
-        } else if self.current_scanline > self.tv_system.vblank_frames + rendered_scanlines
-            && self.current_scanline <= self.tv_system.vblank_frames + rendered_scanlines + self.tv_system.post_render_scanlines {
-            // post render line - do nothing ppu wise.
-            // Actually render the image
+        } else if self.current_scanline <= post_render_end {
+            // post render line - do nothing ppu wise. As rendering has ended, we can actually render the image
             if self.pos_at_scanline == 0 {
                 self.renderer.render(&self.pixels); // placeholder
             }
         }
         
+ 
+  
         self.update_scanline_pos();
     }
 
@@ -317,14 +321,23 @@ impl Ppu {
 
             if (self.pos_at_scanline >=1 && self.pos_at_scanline <= 256) || (self.pos_at_scanline >= 321 && self.pos_at_scanline <= 336) {
                 self.do_memory_access();
-                self.update_registers();
             }
-
+            
+            if self.pos_at_scanline == 256 {
+                self.increment_vram_y();
+            } 
+        
+            if self.pos_at_scanline == 257  {
+                self.update_x_scroll();
+            }
+            
             // reset scroll values
             if self.pos_at_scanline >= 280 && self.pos_at_scanline <= 304 && self.rendering_enabled() {
                 self.update_y_scroll();
             }
         }
+            
+       // self.update_registers();
     }
 
     fn update_scanline_pos(&mut self) {
@@ -343,62 +356,35 @@ impl Ppu {
             // do nothing if rendering is not enabled
             return;
         }
-
-        /*let mut outer = 0x0000;
-
-        while outer < 0x4000 {
-
-            print!("0x{:04X}:", outer);
-
-            let mut inner = 0x00;
-            while inner < 0x10 {
-                if inner % 4 == 0 {
-                    print!(" ");
-                }
-                print!("{:02X} ", self.vram.read(outer + inner));
-                inner += 1;
-            }
-            println!("");
-            outer += 0x010;
-        }
-
-        panic!("Done");*/
-      /*  println!("Scanline: {:03}\tPos at scanline: {:03}, vram_address: ${:04X}",
-        self.current_scanline,
-        self.pos_at_scanline,
-        self.vram_address
-        );*/
+        
         if self.pos_at_scanline == 0 {
             // idle cycle
-        } else if self.pos_at_scanline <= 256 {
-            self.render_pixel();
+        } else if self.pos_at_scanline <= 256 {            
+            self.render_pixel();   
             self.do_memory_access();
-            
-            if self.pos_at_scanline % 8 == 0 {            
-                self.update_vram_x();
-            }
-            self.update_registers();
-        
-                
+            if self.pos_at_scanline == 256 {
+                self.increment_vram_y();
+            } 
         } else if self.pos_at_scanline <= 320 {
-        } else if self.pos_at_scanline <= 336 {
-            self.do_memory_access();
-            if self.pos_at_scanline % 8 == 0 {            
-                self.update_vram_x();
-            }
-            self.update_registers();  
-        
-        } else {
             
+        } else if self.pos_at_scanline <= 336 {
+            self.do_memory_access();                         
+        } 
+        
+        if self.pos_at_scanline == 257  {
+            self.update_x_scroll();
         }
+            
     }
 
     fn do_memory_access(&mut self) {
          self.background_data = self.background_data << 4; // shift data for next pixel rendering
          match self.pos_at_scanline & 0x07 {
-            0 => {
-                self.update_buffers();
-              //  self.update_vram_x();
+            0 => {                       
+                if self.pos_at_scanline & 0x07 == 0 {
+                    self.increment_vram_x();
+                }
+                self.update_buffers();    
             },
             1 => self.read_nametable_byte(),
             3 => self.read_attribute_byte(),
@@ -427,15 +413,6 @@ impl Ppu {
 
     	self.background_data = self.background_data | temp as u64;
     }
-
-    fn update_registers(&mut self) {
-        if self.pos_at_scanline == 256 {
-            self.update_vram_y();
-        } else if self.pos_at_scanline == 257 {
-            self.update_x_scroll();
-        }
-    }
-
 
     // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
     fn read_nametable_byte(&mut self) {
@@ -483,18 +460,19 @@ impl Ppu {
     fn render_pixel(&mut self) {
         // for now, only background rendering.
 
-        let y = self.current_scanline as usize - self.tv_system.vblank_frames as usize - 1; // - 1 for pre-render-line
-        let x = self.pos_at_scanline as usize - 1; // - 1 for the skipped cycle
-
+        let mut y = self.current_scanline - self.tv_system.vblank_frames - 1; // - 1 for pre-render-line
+        let mut x = self.pos_at_scanline - 1; // - 1 for the skipped cycle
+ 
+        let index = y as usize*256 + x as usize;
         // if background rendering is disabled, blank the pixel
         if self.registers.mask & 0x08 == 0 {
-            self.pixels[y*256 + x] = Pixel::new(0, 0, 0);
+            self.pixels[index] = Pixel::new(0, 0, 0);
             return;
         }
 
         let background = ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8;
         
-        let mut palette_index = if background  % 4 == 0 {
+        let palette_index = if background  % 4 == 0 {
             0
         } else {
             background
@@ -502,26 +480,25 @@ impl Ppu {
         
         let color_index = (self.vram.read(0x3F00 + background as u16) % 64) as usize;
 
-        self.pixels[y*256 + x] = Pixel::new(PALETTE[color_index*3], PALETTE[color_index*3 + 1], PALETTE[color_index*3 + 2]);
+        self.pixels[index] = Pixel::new(PALETTE[color_index*3], PALETTE[color_index*3 + 1], PALETTE[color_index*3 + 2]);
     }
     
     // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Coarse_X_increment
-    fn update_vram_x(&mut self) {
+    fn increment_vram_x(&mut self) {
     	if self.vram_address & 0x001F == 31 {                    
-            self.vram_address &= !0x001F;          // coarse X = 0
+            self.vram_address = self.vram_address & 0xFFE0;          // coarse X = 0
             self.vram_address ^= 0x0400;           // switch horizontal nametable
     	} else {
     		self.vram_address += 1;
     	}
     }
 
-
     // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Y_increment
     // Implementation directly from nesdev wiki with only necessary changes to make it compile. 
     // Commments preserved
     
     // Executed every 256 pixel on (pre)render scanlines if rendering is enabled
-    fn update_vram_y(&mut self) {
+    fn increment_vram_y(&mut self) {
          if (self.vram_address & 0x7000) != 0x7000 {        // if fine Y < 7
             self.vram_address += 0x1000;                      // increment fine Y
         }

@@ -54,7 +54,7 @@ impl<'a> Renderer for SDLRenderer<'a> {
 
             for y in (0..240) {
                  for x in (0..256) {
-                     let pixel = pixels[y * 240 + x].clone();
+                     let pixel = pixels[y * 256 + x].clone();
                      let offset = y*pitch + 4*x;
                      buffer[offset + 0] = pixel.b as u8;
                      buffer[offset + 1] = pixel.g as u8;
