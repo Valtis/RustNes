@@ -54,6 +54,7 @@ pub struct Ppu {
     object_attribute_memory: Vec<u8>,
     secondary_oam: Vec<u8>,
     secondary_contains_sprite_0: bool,
+    is_even_frame: bool,
     vram: Box<Memory>,
     registers: Registers,
     address_latch: bool,
@@ -118,6 +119,7 @@ impl Ppu {
             object_attribute_memory: vec![0;256],
             secondary_oam: vec![0;32],
             secondary_contains_sprite_0: false,
+            is_even_frame: true,
             vram: Box::new(Vram::new(mirroring, rom)),
             registers: Registers::new(),
             address_latch: false,
@@ -296,11 +298,13 @@ impl Ppu {
 
     fn update_scanline_pos(&mut self) {
         self.pos_at_scanline += 1;
-        if self.pos_at_scanline == 340 {
+        self.is_even_frame = !self.is_even_frame;
+        if self.pos_at_scanline == 341 {
             self.pos_at_scanline = 0;
             self.current_scanline += 1;
             if self.current_scanline > 261 {
                 self.current_scanline = 0;
+                self.is_even_frame = true;
             }
         }
     }
@@ -324,7 +328,6 @@ impl Ppu {
                 self.renderer.render(&self.pixels); // placeholder
             }
         }
-
         self.update_scanline_pos();
     }
 
@@ -370,6 +373,13 @@ impl Ppu {
             // This may backfire horribly later on
             if self.pos_at_scanline == 256 {
                 self.evaluate_sprites();
+            }
+
+            if self.pos_at_scanline == 339 && !self.is_even_frame {
+                match self.tv_system.tv_type {
+                    TvSystem::NTSC => self.pos_at_scanline += 1,
+                    _ => { },
+                }
             }
         }
     }

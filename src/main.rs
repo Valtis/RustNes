@@ -10,5 +10,5 @@ mod rom;
 use console::Console;
 
 fn main() {
-    Console::execute("donkey.nes");
+    Console::execute("supermario.nes");
 }

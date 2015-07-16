@@ -2,6 +2,7 @@ use rom::TvSystem;
 
 #[derive(Debug)]
 pub struct TvSystemValues {
+    pub tv_type: TvSystem,
     pub ppu_cycles_per_cpu_cycle: u8,
     // add extra ppu cycle for N cpu cycles. PAL requires extra cycle every 5 cycle
     // if 0, no extra cycles will be executed
@@ -16,6 +17,7 @@ impl TvSystemValues {
         match *tv_type {
             TvSystem::PAL => panic!("PAL support is not implemented"),
             TvSystem::NTSC => TvSystemValues {
+                tv_type: tv_type.clone(),
                 ppu_cycles_per_cpu_cycle: 3,
                 ppu_extra_cycle_every_cpu_cycle: 0,
                 extra_cycle_counter: 0,
