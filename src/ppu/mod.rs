@@ -36,6 +36,7 @@ static PALETTE: [u8; 192] = [
 
 pub struct Ppu {
     object_attribute_memory: Vec<u8>,
+    secondary_oam: Vec<u8>,
     vram: Box<Memory>,
     registers: Registers,
     address_latch: bool,
@@ -98,6 +99,7 @@ impl Ppu {
     pub fn new(renderer: Box<Renderer>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
+            secondary_oam: vec![0;32],
             vram: Box::new(Vram::new(mirroring, rom)),
             registers: Registers::new(),
             address_latch: false,
@@ -297,7 +299,7 @@ impl Ppu {
         } else if self.current_scanline == self.tv_system.vblank_frames {
             self.do_pre_render_line();
         } else if self.current_scanline <= render_end {
-            self.do_render();
+            self.do_render_line();
         } else if self.current_scanline <= post_render_end {
             // post render line - do nothing ppu wise. As rendering has ended, we can actually render the image
             if self.pos_at_scanline == 0 {
@@ -317,8 +319,9 @@ impl Ppu {
     fn do_vblank(&mut self) {
         // VBLANK - do not access memory or render.
         // However, set vblank flag on second tick of first scanline and raise NMI if nmi flag is set
+        // also clear the overflow flag
         if self.current_scanline == 0 && self.pos_at_scanline == 1 {
-            self.registers.status = self.registers.status | 0x80;
+            self.registers.status = (self.registers.status & 0xDF) | 0x80;
             self.generate_nmi_if_flags_set();
         }
     }
@@ -329,7 +332,6 @@ impl Ppu {
         }
 
         if self.rendering_enabled() {
-
             if (self.pos_at_scanline >=1 && self.pos_at_scanline <= 256) || (self.pos_at_scanline >= 321 && self.pos_at_scanline <= 336) {
                 self.do_memory_access();
             }
@@ -344,12 +346,19 @@ impl Ppu {
             if self.pos_at_scanline >= 280 && self.pos_at_scanline <= 304 && self.rendering_enabled() {
                 self.update_y_scroll();
             }
+            // in real NES, sprite evaluation happens at the same time than background evaluation
+            // however, whereas cycle accuracy with background is required for split screen emulation
+            // I am unaware as of writing this of any downsides of doing sprite evaluation in single pass.
+            // This may backfire horribly later on
+            if self.pos_at_scanline == 256 {
+                self.evaluate_sprites();
+            }
         }
     }
 
 
 
-    fn do_render(&mut self) {
+    fn do_render_line(&mut self) {
         if !self.rendering_enabled() {
             // do nothing if rendering is not enabled
             return;
@@ -364,14 +373,21 @@ impl Ppu {
                 self.increment_vram_y();
             }
         } else if self.pos_at_scanline <= 320 {
-
+            // background wise do nothing - sprite part is handled in evaluate_sprites
+            // Actual nes recycles circuitry and sprites use same tile
         } else if self.pos_at_scanline <= 336 {
             self.do_memory_access();
+        }
+
+        // as with pre-render line
+        if self.pos_at_scanline == 256 {
+            self.evaluate_sprites();
         }
 
         if self.pos_at_scanline == 257  {
             self.update_x_scroll();
         }
+
     }
 
     fn do_memory_access(&mut self) {
@@ -439,10 +455,10 @@ impl Ppu {
         // is assigned to this 16x16 square, which is also the reason why 16x16 pixel squares must
         // share the palette.
         // (see http://wiki.nesdev.com/w/index.php/PPU_attribute_tables)
-        
-        // thus we need to do some bit manipulation in order to select the correct palette
-        // then the attribute is finally shifted 2 position left so that the update_background_data
-        // can just straight bitwise or it in the final data buffer (otherwise the << 2 would
+
+        // Thus we need to do some bit manipulation in order to select the correct palette.
+        // Then the attribute is finally shifted 2 position left so that the update_background_data
+        // can just straight bitwise_or it in the final data buffer (otherwise the << 2 would
         // have to be done there)
         let shift = ((self.vram_address >> 4) & 0x04) | (self.vram_address & 0x02);
         self.attribute_table_byte = ((self.vram.read(attribute_address) >> shift) & 0x03) << 2;
@@ -468,6 +484,8 @@ impl Ppu {
         self.pattern_table_high_byte = self.vram.read(address);
     }
 
+
+    // TODO - implement color emphasis
     fn render_pixel(&mut self) {
         // for now, only background rendering.
 
@@ -487,17 +505,23 @@ impl Ppu {
             ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8
         };
 
-        let sprite_multiplex = 0; // placeholder
-        let background_multiplex = background  % 4;
+        let sprite = if self.registers.mask & 0x04 == 0 && x < 8 { // sprite rendering disabled for first 8 pixels
+            0
+        } else {
+            0 // PLACEHOLDER - fetch sprite data here
+        };
+
+        let sprite_multiplex = sprite % 4; // placeholder
+        let background_multiplex = background % 4;
         // http://wiki.nesdev.com/w/index.php/PPU_rendering#Preface - see priority multiplexer decision table
         let palette_index = if background_multiplex == 0 && sprite_multiplex == 0 {
             0
         } else if sprite_multiplex == 0 && background_multiplex != 0 {
             background
         } else if sprite_multiplex != 0 && background_multiplex == 0 {
-            0 // PLACEHOLDER - should return sprite pixel
+            sprite
         } else {
-            background // PLACEHOLDER - should return either sprite or background data depending on priorities
+            panic!("Sprite/background priority handling is not implemented");
         };
 
         let color_index = (self.vram.read(0x3F00 + palette_index as u16) % 64) as usize;
@@ -547,6 +571,79 @@ impl Ppu {
     fn update_y_scroll(&mut self) {
         // v: IHGF.ED CBA..... = t: IHGF.ED CBA.....
         self.vram_address = (self.vram_address & 0x841F) | (self.registers.temporary & 0x7BE0);
+    }
+
+    // http://wiki.nesdev.com/w/index.php/PPU_sprite_evaluation
+    // For ease of implementation, I'm not going for cycle accuracy here.
+    // This will be changed in case this actually causes issues.
+    fn evaluate_sprites(&mut self) {
+        self.initialize_secondary_oam();
+        self.copy_data_to_secondary_oam();
+    }
+
+    fn initialize_secondary_oam(&mut self) {
+        // initialize secondary oam
+        for i in 0..32 {
+            self.secondary_oam[i] = 0xFF;
+        }
+    }
+
+    fn copy_data_to_secondary_oam(&mut self) {
+        let mut secondary_oam_sprites = 0;
+        // used to emulate the PPU overflow flag bug where offset is incorrectly incremented
+        let mut overflow_offset = 0;
+        for oam_sprite in 0..64 {
+            if secondary_oam_sprites < 8 {
+                self.evaluate_sprite_for_addition(oam_sprite, &mut secondary_oam_sprites);
+            } else {
+                // NES PPU has a hardware bug when handling overflow flag; it is supposed to scan
+                // the remaining sprite y coordinates and set the overflow flag if additional sprites
+                // are on the scanline. However the cirucitry incorrectly increments the offset
+                // and thus the result is more or less random
+
+                // for what it's worth, every 4th sprite is evaluated correctly
+                let incorrect_index = (oam_sprite * 4 + overflow_offset) as usize;
+                let incorrect_y_coordinate = self.object_attribute_memory[incorrect_index];
+
+                if self.sprite_is_on_scanline(incorrect_y_coordinate) {
+                    self.registers.status = self.registers.status | 0x20;
+                    break;
+                }
+                // incorrect PPU offset increment
+                overflow_offset = (overflow_offset + 1) & 0x03; // wraps around
+            }
+        }
+    }
+
+    fn evaluate_sprite_for_addition(&mut self, oam_sprite: u8, secondary_oam_sprites: &mut u8) {
+        let index = (oam_sprite * 4) as usize;
+        let y = self.object_attribute_memory[index];
+        let secondary_index = (*secondary_oam_sprites*4) as usize;
+
+        // y is written to secondary oam in any case (if there is space), even if sprite is not visible
+        // in case there are fewer than 8 sprites on scanline, this will be the y value of sprite 63
+        if secondary_index < self.secondary_oam.len() {
+            self.secondary_oam[secondary_index] = self.object_attribute_memory[index];
+        }
+
+
+        if self.sprite_is_on_scanline(y) {
+            // copy remaining bytes into secondary oam
+            for i in 1..4 {
+                self.secondary_oam[secondary_index + i] = self.object_attribute_memory[index + i];
+            }
+            *secondary_oam_sprites += 1;
+        }
+    }
+
+    fn sprite_is_on_scanline(&mut self, y: u8) -> bool {
+        let diff = (self.current_scanline - self.tv_system.vblank_frames) as i16 - y as i16;
+        // sprite height; either 8 pixels or 16 pixels, depending on whether bit 5 is set
+        // in the control register
+        let height = 8 + 8*((0x20 & self.registers.control) >> 5) as i16;
+
+        // sprite is visible if diff is between 0 and height
+        diff >= 0 && diff < height
     }
 }
 
