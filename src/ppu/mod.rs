@@ -574,9 +574,7 @@ impl Ppu {
                     let sprite_patten_index = self.secondary_oam[i*4 + 1] as u16;
                     let sprite_attribute = self.secondary_oam[i*4 + 2];
                     let sprite_begin_x = self.secondary_oam[i*4 + 3] as u16;
-                    if x == 0xFF {
-                        continue;
-                    }
+
                     // in range && not transparent
                     if x >= sprite_begin_x && x < sprite_begin_x + 8 {
                         let x_diff = x - sprite_begin_x;
@@ -605,6 +603,9 @@ impl Ppu {
 
                 		let mut color = ((low_byte << x_shift) & 0x80) >> 7;
                 		color = color  | ((high_byte << x_shift) & 0x80) >> 6;
+                        if color == 0 {
+                            continue;
+                        }
                         let sprite_palette_offset = 4*4;
                         let palette_index = sprite_palette_offset
                             + ((sprite_attribute & 0x03) << 2 | color);
