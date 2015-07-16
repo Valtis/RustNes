@@ -34,9 +34,26 @@ static PALETTE: [u8; 192] = [
 ];
 
 
+struct SpriteRenderData {
+    is_sprite_0: bool,
+    has_foreground_priority: bool,
+    palette_index: u8,
+}
+
+impl SpriteRenderData {
+    fn new(is_sprite_0: bool, has_foreground_priority: bool, palette_index: u8) -> SpriteRenderData {
+        SpriteRenderData {
+            is_sprite_0: is_sprite_0,
+            has_foreground_priority: has_foreground_priority,
+            palette_index: palette_index,
+        }
+    }
+}
+
 pub struct Ppu {
     object_attribute_memory: Vec<u8>,
     secondary_oam: Vec<u8>,
+    secondary_contains_sprite_0: bool,
     vram: Box<Memory>,
     registers: Registers,
     address_latch: bool,
@@ -100,6 +117,7 @@ impl Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
             secondary_oam: vec![0;32],
+            secondary_contains_sprite_0: false,
             vram: Box::new(Vram::new(mirroring, rom)),
             registers: Registers::new(),
             address_latch: false,
@@ -319,9 +337,9 @@ impl Ppu {
     fn do_vblank(&mut self) {
         // VBLANK - do not access memory or render.
         // However, set vblank flag on second tick of first scanline and raise NMI if nmi flag is set
-        // also clear the overflow flag
+        // also clear the overflow flag and sprite 0 hit
         if self.current_scanline == 0 && self.pos_at_scanline == 1 {
-            self.registers.status = (self.registers.status & 0xDF) | 0x80;
+            self.registers.status = (self.registers.status & 0x9F) | 0x80;
             self.generate_nmi_if_flags_set();
         }
     }
@@ -485,6 +503,7 @@ impl Ppu {
     }
 
 
+
     // TODO - implement color emphasis
     fn render_pixel(&mut self) {
         // for now, only background rendering.
@@ -492,26 +511,10 @@ impl Ppu {
         let y = self.current_scanline - self.tv_system.vblank_frames - 1; // - 1 for pre-render-line
         let x = self.pos_at_scanline - 1; // - 1 for the skipped cycle
 
-        let index = y as usize*256 + x as usize;
-        // if background rendering is disabled, blank the pixel
-        if self.registers.mask & 0x08 == 0 {
-            self.pixels[index] = Pixel::new(0, 0, 0);
-            return;
-        }
+        let background = self.get_background_for_rendering(x);
+        let sprite = self.get_sprite_for_rendering(x, y);
 
-        let background = if self.registers.mask & 0x02 == 0 && x < 8 { // background rendering disabled for first 8 pixels
-            0
-        } else {
-            ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8
-        };
-
-        let sprite = if self.registers.mask & 0x04 == 0 && x < 8 { // sprite rendering disabled for first 8 pixels
-            0
-        } else {
-            0 // PLACEHOLDER - fetch sprite data here
-        };
-
-        let sprite_multiplex = sprite % 4; // placeholder
+        let sprite_multiplex = sprite.palette_index % 4;
         let background_multiplex = background % 4;
         // http://wiki.nesdev.com/w/index.php/PPU_rendering#Preface - see priority multiplexer decision table
         let palette_index = if background_multiplex == 0 && sprite_multiplex == 0 {
@@ -519,14 +522,101 @@ impl Ppu {
         } else if sprite_multiplex == 0 && background_multiplex != 0 {
             background
         } else if sprite_multiplex != 0 && background_multiplex == 0 {
-            sprite
+            sprite.palette_index
         } else {
-            panic!("Sprite/background priority handling is not implemented");
+            if sprite.is_sprite_0 {
+                self.registers.status = self.registers.status | 0x40;
+            }
+
+            if sprite.has_foreground_priority {
+                sprite.palette_index
+            } else {
+                background
+            }
         };
 
         let color_index = (self.vram.read(0x3F00 + palette_index as u16) % 64) as usize;
 
+        let index = y as usize*256 + x as usize;
         self.pixels[index] = Pixel::new(PALETTE[color_index*3], PALETTE[color_index*3 + 1], PALETTE[color_index*3 + 2]);
+    }
+
+    fn get_background_for_rendering(&mut self, x: u16) -> u8{
+        if self.registers.mask & 0x02 == 0 && x < 8 { // background rendering disabled for first 8 pixels
+           0
+       } else {
+           // if background rendering is disabled, return 0
+           if self.registers.mask & 0x08 == 0 {
+               0
+           } else {
+               // fetch the current data from buffer by first shifting 32 bits left (discard first 4 bytes)
+               // then further shifting it by 0 - 7 pixels depending on fine scroll value and finally getting
+               // the first 4 bits
+               ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8
+           }
+       }
+    }
+
+    fn get_sprite_for_rendering(&mut self, x: u16, y: u16) -> SpriteRenderData {
+        if self.registers.mask & 0x04 == 0 && x < 8 { // sprite rendering disabled for first 8 pixels
+            SpriteRenderData::new(false, false, 0)
+        } else {
+            if self.registers.mask & 0x10 == 0 {
+                SpriteRenderData::new(false, false, 0) // sprite rendering is disabled
+            } else {
+                // 16 8x16 sprites not implemented yet
+                if self.registers.control & 0x20 != 0 {
+                    panic!("8x16 sprites are not implemented yet");
+                }
+                // first non-transparent pixel is selected for rendering
+                for i in 0..8 {
+                    let sprite_y = self.secondary_oam[i*4 + 0];
+                    let sprite_patten_index = self.secondary_oam[i*4 + 1] as u16;
+                    let sprite_attribute = self.secondary_oam[i*4 + 2];
+                    let sprite_begin_x = self.secondary_oam[i*4 + 3] as u16;
+                    if x == 0xFF {
+                        continue;
+                    }
+                    // in range && not transparent
+                    if x >= sprite_begin_x && x < sprite_begin_x + 8 {
+                        let x_diff = x - sprite_begin_x;
+
+                        // horizonal offset
+                        let x_shift = if sprite_attribute & 0x40 == 0 {
+                            x_diff
+                        } else {
+                            7 - x_diff
+                        };
+
+                        let y_diff = y - (sprite_y) as u16;
+                        let sprite_y_offset = if sprite_attribute & 0x80 == 0{
+                            y_diff
+                        } else {
+                            7 - y_diff
+                        };
+
+                        // TODO - consider reusing the pattern table fetching code from background logic
+                        // pattern table
+                        //let table = 0x1000 * (((self.registers.control as u16) & 0x10) >> 4);
+                        //println!("table: {}", table);
+                        let table = 0;
+                        let low_byte = self.vram.read(table + sprite_patten_index*16 + sprite_y_offset);
+                        let high_byte = self.vram.read(table + sprite_patten_index*16 + 8 + sprite_y_offset);
+
+                		let mut color = ((low_byte << x_shift) & 0x80) >> 7;
+                		color = color  | ((high_byte << x_shift) & 0x80) >> 6;
+                        let sprite_palette_offset = 4*4;
+                        let palette_index = sprite_palette_offset
+                            + ((sprite_attribute & 0x03) << 2 | color);
+
+                        return SpriteRenderData::new(i == 0 && self.secondary_contains_sprite_0,
+                            sprite_attribute & 0x20 == 0,
+                            palette_index);
+                    }
+                }
+                SpriteRenderData::new(false, false, 0)
+            }
+        }
     }
 
     // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Coarse_X_increment
@@ -586,6 +676,7 @@ impl Ppu {
         for i in 0..32 {
             self.secondary_oam[i] = 0xFF;
         }
+        self.secondary_contains_sprite_0 = false;
     }
 
     fn copy_data_to_secondary_oam(&mut self) {
@@ -628,6 +719,9 @@ impl Ppu {
 
 
         if self.sprite_is_on_scanline(y) {
+            if oam_sprite == 0 {
+                self.secondary_contains_sprite_0 = true;
+            }
             // copy remaining bytes into secondary oam
             for i in 1..4 {
                 self.secondary_oam[secondary_index + i] = self.object_attribute_memory[index + i];
