@@ -161,7 +161,8 @@ impl Ppu {
     }
 
     fn control_register_write(&mut self, value: u8) {
-        self.registers.control = value;
+        self.registers.control = value;      
+        self.registers.temporary = (self.registers.temporary & 0xF3FF) | (self.registers.control as u16 & 0x03) << 10;       
         self.generate_nmi_if_flags_set();
     }
 
