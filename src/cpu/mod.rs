@@ -3,7 +3,6 @@ use rom::TvSystem;
 use memory::Memory;
 use std::rc::Rc;
 use std::cell::RefCell;
-
 // official opcodes: http://www.obelisk.demon.co.uk/6502/reference.html
 // addressing modes: http://www.obelisk.demon.co.uk/6502/addressing.html
 
@@ -13,7 +12,6 @@ use std::cell::RefCell;
 
 // The documentation on behaviour of unofficial opcodes is somewhat inconsistent.
 // Conflicts have been solved by observing existing emulator behaviour (hopefully they got it right)
-
 #[derive(Debug)]
 pub struct Cpu {
     memory: Rc<RefCell<Box<Memory>>>, // reference to memory, so that cpu can use it
@@ -327,7 +325,7 @@ impl Cpu {
             253 => self.subtract_absolute_x(),
             254 => self.increment_memory_absolute_x(),
             255 => self.unofficial_increment_memory_subtract_acc_absolute_x(),
-            _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:?}", instruction,
+            _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:#?}", instruction,
                 self.program_counter - 1, self),
         }
 
