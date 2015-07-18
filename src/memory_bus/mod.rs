@@ -137,6 +137,7 @@ mod tests {
             rom: rom.clone(),
             ram: Box::new(MockMemory::new()),
             ppu: Rc::new(RefCell::new(Ppu::new(Box::new(MockRenderer::new()), TvSystem::NTSC, Mirroring::VerticalMirroring, rom.clone()))),
+            controllers: vec![],
         }
     }
 

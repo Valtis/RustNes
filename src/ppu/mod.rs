@@ -843,6 +843,14 @@ mod tests {
         ppu.write(0x2000, 0x83);
         assert_eq!(true, ppu.nmi_occured);
     }
+    
+    #[test]
+    fn write_to_0x2000_updates_temporary_register_nametable() {
+        let mut ppu = create_test_ppu();
+        ppu.registers.temporary = 0x00;
+        ppu.write(0x2000, 0x02);
+        assert_eq!(0x0800, ppu.registers.temporary);
+    }
 
     #[test]
     #[should_panic]
