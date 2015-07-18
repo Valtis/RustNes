@@ -124,8 +124,6 @@ impl Console {
                 time = current_time;
             }
 
-            // TEMPORARY. Poll events so t hat window doesn't freeze
-
             for event in sdl_context.event_pump().poll_iter() {
 
                 match event {
