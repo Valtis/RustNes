@@ -75,7 +75,10 @@ impl Controller {
     }
 
     pub fn key_down(&mut self, code: Keycode) {
-       self.buttons = self.buttons | match self.controls[&code] {
+        if !self.controls.contains_key(&code) {
+            return;
+        }
+        self.buttons = self.buttons | match self.controls[&code] {
             Button::A => 0x80, // set bit 7
             Button::B => 0x40, // set bit 6
             Button::Select => 0x20, // set bit 5
@@ -87,7 +90,11 @@ impl Controller {
         }
     }
 
-    pub fn key_up(&mut self, code: Keycode) {
+    pub fn key_up(&mut self, code: Keycode) {        
+        if !self.controls.contains_key(&code) {
+            return;
+        }
+        
         self.buttons = self.buttons & match self.controls[&code] {
             Button::A => 0x7F, // clear bit 7
             Button::B => 0xBF,  // clear bit 6
