@@ -1,6 +1,7 @@
 use memory::*;
 use ram::*;
 use ppu::*;
+use controller::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -8,8 +9,10 @@ pub struct MemoryBus {
     rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
     ppu: Rc<RefCell<Ppu>>,
-    // TODO: APU, controllers
+    controllers: Vec<Rc<RefCell<Controller>>>,
+    // TODO: APU
 }
+
 
 impl Memory for MemoryBus {
     fn read(&mut self, address: u16) -> u8 {
@@ -17,7 +20,12 @@ impl Memory for MemoryBus {
             self.ram.read(address)
         } else if (address >= 0x2000 && address <= 0x3FFF) || address == 0x4014 {
             self.ppu.borrow_mut().read(address)
-        } else if address >= 0x4020 {
+        } else if address == 0x4016 {
+            self.controllers[0].borrow_mut().read(address)
+        } else if address == 0x04017 {
+            self.controllers[1].borrow_mut().read(address)
+        }
+        else if address >= 0x4020 {
             self.rom.borrow_mut().read(address)
         } else {
             0
@@ -38,6 +46,9 @@ impl Memory for MemoryBus {
             }
 
             self.ppu.borrow_mut().oam_dma_write(data);
+        } else if address == 0x4016 {
+            self.controllers[0].borrow_mut().write(address, value);
+            self.controllers[1].borrow_mut().write(address, value);
         }
         else if address >= 0x4020 {
             self.rom.borrow_mut().write(address, value);
@@ -47,11 +58,14 @@ impl Memory for MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(rom: Rc<RefCell<Box<Memory>>>, ppu: Rc<RefCell<Ppu>>) -> MemoryBus  {
+    pub fn new(rom: Rc<RefCell<Box<Memory>>>, 
+               ppu: Rc<RefCell<Ppu>>, 
+               controllers: Vec<Rc<RefCell<Controller>>>) -> MemoryBus  {
         MemoryBus {
             rom: rom,
             ram: Box::new(Ram::new()) as Box<Memory>,
             ppu: ppu,
+            controllers: controllers,
         }
     }
 }
@@ -66,9 +80,9 @@ mod tests {
     use ppu::renderer::*;
     use std::cell::RefCell;
     use std::rc::Rc;
-   
+
     // 64 kilobytes of memory, no mapped addresses
-   
+
     struct MockRenderer;
 
     impl MockRenderer {

@@ -9,6 +9,7 @@ use cpu::Cpu;
 use ppu::Ppu;
 use rom::read_rom;
 use ppu::renderer::*;
+use controller::Controller;
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -20,6 +21,7 @@ pub struct Console {
     cpu: Cpu,
     memory: Rc<RefCell<Box<Memory>>>,
     ppu: Rc<RefCell<Ppu>>,
+    controllers: Vec<Rc<RefCell<Controller>>>,
 }
 
 impl Console {
@@ -48,7 +50,7 @@ impl Console {
 
         */
         let mut sdl_context = sdl2::init().video().unwrap();
-       
+
 
         // hardcoded resolution for now. TODO: Implement arbitrary resolution & scaling
         let window = sdl_context.window("RustNes", 256*2, 240*2)
@@ -62,19 +64,33 @@ impl Console {
 
         let rom = Box::new(read_rom(rom_path));
         
-        println!("{:?}", rom.header);
+        let controller_one = Rc::new(RefCell::new(Controller::new(None)));
+        let controller_two = Rc::new(RefCell::new(Controller::new(None)));
+        let controllers = vec![controller_one.clone(), controller_two.clone()];
         
+                
+        println!("{:#?}", rom.header);
+
         let tv_system = rom.header.tv_system.clone();
         let mirroring = rom.header.mirroring.clone();
 
         let rom_mem = Rc::new(RefCell::new(rom as Box<Memory>));
         let ppu = Rc::new(RefCell::new(Ppu::new(Box::new(renderer), tv_system.clone(), mirroring, rom_mem.clone())));
 
-        let mem = Rc::new(RefCell::new(Box::new(MemoryBus::new(rom_mem.clone(), ppu.clone())) as Box<Memory>));
+        let mem = Rc::new(RefCell::new(
+            Box::new(
+                MemoryBus::new(
+                    rom_mem.clone(), 
+                    ppu.clone(),
+                    controllers.clone(),
+                )
+            ) as Box<Memory>));
+        
         let mut console = Console {
             memory: mem.clone(),
             cpu: Cpu::new(&tv_system, mem.clone()),
             ppu: ppu.clone(),
+            controllers: controllers.clone(),
         };
 
 
@@ -116,6 +132,18 @@ impl Console {
                     Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         break 'main_loop;
                     },
+                    Event::KeyDown { keycode, ..} => { 
+                        if let Some(key) = keycode {  
+                            console.controllers[0].borrow_mut().key_down(key);
+                            console.controllers[1].borrow_mut().key_down(key);
+                        }
+                    },
+                    Event::KeyUp { keycode, ..} => { 
+                        if let Some(key) = keycode {  
+                            console.controllers[0].borrow_mut().key_up(key);
+                            console.controllers[1].borrow_mut().key_up(key);
+                        }
+                    }
                     _ => {}
                 }
             }

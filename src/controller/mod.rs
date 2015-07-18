@@ -5,6 +5,7 @@ use self::sdl2::keyboard::Keycode;
 
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub enum Button {
     Up,
     Down,
@@ -16,6 +17,7 @@ pub enum Button {
     Select,
 }
 
+#[derive(Debug)]
 pub struct Controller {
     controls: HashMap<Keycode, Button>,
     buttons: u8,
@@ -46,7 +48,7 @@ impl Memory for Controller {
 }
 
 impl Controller {
-    fn new(optional_controls: Option<HashMap<Keycode, Button>>) -> Controller {
+    pub fn new(optional_controls: Option<HashMap<Keycode, Button>>) -> Controller {
         let controls = match optional_controls {
             Some(x) => x,
             None => {
@@ -72,8 +74,8 @@ impl Controller {
         }
     }
 
-    fn key_down(&mut self, code: Keycode) {
-        self.buttons = self.buttons | match self.controls[&code] {
+    pub fn key_down(&mut self, code: Keycode) {
+       self.buttons = self.buttons | match self.controls[&code] {
             Button::A => 0x80, // set bit 7
             Button::B => 0x40, // set bit 6
             Button::Select => 0x20, // set bit 5
@@ -85,7 +87,7 @@ impl Controller {
         }
     }
 
-    fn key_up(&mut self, code: Keycode) {
+    pub fn key_up(&mut self, code: Keycode) {
         self.buttons = self.buttons & match self.controls[&code] {
             Button::A => 0x7F, // clear bit 7
             Button::B => 0xBF,  // clear bit 6

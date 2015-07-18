@@ -6,6 +6,7 @@ mod memory;
 mod memory_bus;
 mod ram;
 mod rom;
+mod controller;
 
 use console::Console;
 
