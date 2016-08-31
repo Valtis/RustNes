@@ -51,8 +51,8 @@ impl<'a> Renderer for SDLRenderer<'a> {
     fn render(&mut self, pixels: &Vec<Pixel>) {
         self.texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
 
-            for y in (0..240) {
-                 for x in (0..256) {
+            for y in 0..240 {
+                 for x in 0..256 {
                      let pixel = pixels[y * 256 + x].clone();
                      let offset = y*pitch + 4*x;
                      buffer[offset + 0] = pixel.b as u8;

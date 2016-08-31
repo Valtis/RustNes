@@ -161,14 +161,17 @@ impl Ppu {
     }
 
     fn control_register_write(&mut self, value: u8) {
-        self.registers.control = value;      
-        self.registers.temporary = (self.registers.temporary & 0xF3FF) | (self.registers.control as u16 & 0x03) << 10;       
+        // t: ...BA.. ........ = d: ......BA
+        self.registers.control = value;
+        self.registers.temporary = (self.registers.temporary & 0xF3FF) | (value as u16 & 0x03) << 10;
         self.generate_nmi_if_flags_set();
     }
 
     fn status_register_read(&mut self) -> u8 {
+        // reset address latch
         self.address_latch = false;
         let val = self.registers.status;
+        // clear vertical blank started
         self.registers.status = self.registers.status & 0x7F;
         val
     }
@@ -428,8 +431,8 @@ impl Ppu {
                 }
                 self.update_background_data();
             },
-            1 => self.read_nametable_byte(),
-            3 => self.read_attribute_byte(),
+            2 => self.read_nametable_byte(),
+            4 => self.read_attribute_byte(),
             5 => self.read_pattern_table_low_byte(),
             7 => self.read_pattern_table_high_byte(),
             _ => {} // do nothing
@@ -563,7 +566,7 @@ impl Ppu {
                // fetch the current data from buffer by first shifting 32 bits left (discard first 4 bytes)
                // then further shifting it by 0 - 7 pixels depending on fine scroll value and finally getting
                // the first 4 bits
-               ((((self.background_data >> 32) as u32) >> ((7 - self.fine_x_scroll)*4)) & 0x0F) as u8
+               (((((self.background_data >> 32) as u32) >> (((7 - self.fine_x_scroll)*4)) & 0x0F))) as u8
            }
        }
     }
@@ -582,7 +585,7 @@ impl Ppu {
                 // first non-transparent pixel is selected for rendering
                 for i in 0..8 {
                     let sprite_y = self.secondary_oam[i*4 + 0];
-                    let sprite_patten_index = self.secondary_oam[i*4 + 1] as u16;
+                    let sprite_pattern_index = self.secondary_oam[i*4 + 1] as u16;
                     let sprite_attribute = self.secondary_oam[i*4 + 2];
                     let sprite_begin_x = self.secondary_oam[i*4 + 3] as u16;
 
@@ -597,20 +600,33 @@ impl Ppu {
                             7 - x_diff
                         };
 
-                        let y_diff = y - (sprite_y) as u16;
-                        let sprite_y_offset = if sprite_attribute & 0x80 == 0{
+
+                        /*
+                            HACK HACK HACK
+                            At least during startup, y can be 0 while sprite_y
+                            is nonzero. This causes an integer overflow with below
+                            y_diff-calculation.
+                        */
+                        if y < sprite_y as u16 {
+                            return SpriteRenderData::new(false, false, 0)
+                        }
+
+                        let y_diff = y - sprite_y as u16;
+
+                        let sprite_y_offset = if sprite_attribute & 0x80 == 0 {
                             y_diff
                         } else {
                             7 - y_diff
                         };
+
 
                         // TODO - consider reusing the pattern table fetching code from background logic
                         // pattern table
                         //let table = 0x1000 * (((self.registers.control as u16) & 0x10) >> 4);
                         //println!("table: {}", table);
                         let table = 0;
-                        let low_byte = self.vram.read(table + sprite_patten_index*16 + sprite_y_offset);
-                        let high_byte = self.vram.read(table + sprite_patten_index*16 + 8 + sprite_y_offset);
+                        let low_byte = self.vram.read(table + sprite_pattern_index*16 + sprite_y_offset);
+                        let high_byte = self.vram.read(table + sprite_pattern_index*16 + 8 + sprite_y_offset);
 
                 		let mut color = ((low_byte << x_shift) & 0x80) >> 7;
                 		color = color  | ((high_byte << x_shift) & 0x80) >> 6;
@@ -633,8 +649,8 @@ impl Ppu {
 
     // http://wiki.nesdev.com/w/index.php/PPU_scrolling#Coarse_X_increment
     fn increment_vram_x(&mut self) {
-    	if self.vram_address & 0x001F == 31 {
-            self.vram_address = self.vram_address & 0xFFE0;          // coarse X = 0
+    	if (self.vram_address & 0x001F) == 31 {
+            self.vram_address &= !0x001F;          // coarse X = 0
             self.vram_address ^= 0x0400;           // switch horizontal nametable
     	} else {
     		self.vram_address += 1;
@@ -647,7 +663,7 @@ impl Ppu {
 
     // Executed every 256 pixel on (pre)render scanlines if rendering is enabled
     fn increment_vram_y(&mut self) {
-         if (self.vram_address & 0x7000) != 0x7000 {        // if fine Y < 7
+        if (self.vram_address & 0x7000) != 0x7000 {        // if fine Y < 7
             self.vram_address += 0x1000;                      // increment fine Y
         }
         else {
@@ -728,7 +744,6 @@ impl Ppu {
         if secondary_index < self.secondary_oam.len() {
             self.secondary_oam[secondary_index] = self.object_attribute_memory[index];
         }
-
 
         if self.sprite_is_on_scanline(y) {
             if oam_sprite == 0 {
@@ -843,7 +858,7 @@ mod tests {
         ppu.write(0x2000, 0x83);
         assert_eq!(true, ppu.nmi_occured);
     }
-    
+
     #[test]
     fn write_to_0x2000_updates_temporary_register_nametable() {
         let mut ppu = create_test_ppu();

@@ -27,11 +27,11 @@ pub struct Controller {
 
 
 impl Memory for Controller {
-    // TODO: Upper 3 bits should maintain the value that the bus had previously; 
+    // TODO: Upper 3 bits should maintain the value that the bus had previously;
     // this is currently not implemented. At least one game uses this (paperboy)
     fn read(&mut self, address: u16) -> u8 {
         assert!(address == 0x4016 || address == 0x4017);
-        
+
         let return_value = ((self.buttons << self.shift) & 0x80) >> 7;
         if self.strobe || self.shift == 7 {
             self.shift = 0;
@@ -90,11 +90,11 @@ impl Controller {
         }
     }
 
-    pub fn key_up(&mut self, code: Keycode) {        
+    pub fn key_up(&mut self, code: Keycode) {
         if !self.controls.contains_key(&code) {
             return;
         }
-        
+
         self.buttons = self.buttons & match self.controls[&code] {
             Button::A => 0x7F, // clear bit 7
             Button::B => 0xBF,  // clear bit 6
@@ -224,7 +224,7 @@ mod tests {
         controller.key_up(Keycode::LShift);
         assert_eq!(0x00, controller.buttons & 0x40);
     }
-    
+
     #[test]
     fn button_select_bit_is_set_if_key_down_is_called_with_correct_keycode() {
         let mut controller = create_test_controller();
@@ -239,7 +239,7 @@ mod tests {
         controller.key_up(Keycode::Tab);
         assert_eq!(0x00, controller.buttons & 0x20);
     }
-            
+
     #[test]
     fn button_start_bit_is_set_if_key_down_is_called_with_correct_keycode() {
         let mut controller = create_test_controller();
@@ -254,7 +254,7 @@ mod tests {
         controller.key_up(Keycode::Return);
         assert_eq!(0x00, controller.buttons & 0x10);
     }
-    
+
     #[test]
     fn button_up_bit_is_set_if_key_down_is_called_with_correct_keycode() {
         let mut controller = create_test_controller();
@@ -268,8 +268,8 @@ mod tests {
         controller.buttons = 0x08;
         controller.key_up(Keycode::Up);
         assert_eq!(0x00, controller.buttons & 0x08);
-    }    
-    
+    }
+
     #[test]
     fn button_down_bit_is_set_if_key_down_is_called_with_correct_keycode() {
         let mut controller = create_test_controller();
@@ -284,7 +284,7 @@ mod tests {
         controller.key_up(Keycode::Down);
         assert_eq!(0x00, controller.buttons & 0x04);
     }
-    
+
     #[test]
     fn button_left_bit_is_set_if_key_down_is_called_with_correct_keycode() {
         let mut controller = create_test_controller();
@@ -298,8 +298,8 @@ mod tests {
         controller.buttons = 0x02;
         controller.key_up(Keycode::Left);
         assert_eq!(0x00, controller.buttons & 0x02);
-    }    
-    
+    }
+
     #[test]
     fn button_right_bit_is_set_if_key_down_is_called_with_correct_keycode() {
         let mut controller = create_test_controller();
@@ -314,14 +314,14 @@ mod tests {
         controller.key_up(Keycode::Right);
         assert_eq!(0x00, controller.buttons & 0x01);
     }
-    
+
     #[test]
     fn a_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
         controller.key_down(Keycode::LCtrl);
         assert_eq!(0x01, controller.read(0x4016));
     }
-    
+
     #[test]
     fn b_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
@@ -331,7 +331,7 @@ mod tests {
         }
         assert_eq!(0x01, controller.read(0x4016));
     }
-    
+
     #[test]
     fn select_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
@@ -341,7 +341,7 @@ mod tests {
         }
         assert_eq!(0x01, controller.read(0x4016));
     }
-    
+
     #[test]
     fn start_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
@@ -351,7 +351,7 @@ mod tests {
         }
         assert_eq!(0x01, controller.read(0x4016));
     }
-    
+
     #[test]
     fn up_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
@@ -360,8 +360,8 @@ mod tests {
             controller.read(0x4016);
         }
         assert_eq!(0x01, controller.read(0x4016));
-    }    
-    
+    }
+
     #[test]
     fn down_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
@@ -371,7 +371,7 @@ mod tests {
         }
         assert_eq!(0x01, controller.read(0x4016));
     }
-    
+
     #[test]
     fn left_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();
@@ -381,7 +381,7 @@ mod tests {
         }
         assert_eq!(0x01, controller.read(0x4016));
     }
-    
+
     #[test]
     fn right_button_status_is_correctly_returned_when_reading_from_0x4016() {
         let mut controller = create_test_controller();

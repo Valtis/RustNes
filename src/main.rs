@@ -1,5 +1,6 @@
 
 mod console;
+mod apu;
 mod cpu;
 mod ppu;
 mod memory;

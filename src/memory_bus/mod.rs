@@ -1,6 +1,7 @@
 use memory::*;
 use ram::*;
 use ppu::*;
+use apu::*;
 use controller::*;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -9,8 +10,8 @@ pub struct MemoryBus {
     rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
     ppu: Rc<RefCell<Ppu>>,
+    apu: Rc<RefCell<Apu>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
-    // TODO: APU
 }
 
 
@@ -20,6 +21,11 @@ impl Memory for MemoryBus {
             self.ram.read(address)
         } else if (address >= 0x2000 && address <= 0x3FFF) || address == 0x4014 {
             self.ppu.borrow_mut().read(address)
+        } else if
+            (address >= 0x4000 && address <= 0x4013 ) ||
+            address == 0x4015 ||
+            address == 0x4017  {
+            self.apu.borrow_mut().read(address)
         } else if address == 0x4016 {
             self.controllers[0].borrow_mut().read(address)
         } else if address == 0x04017 {
@@ -37,6 +43,8 @@ impl Memory for MemoryBus {
             self.ram.write(address, value);
         } else if address >= 0x2000 && address <= 0x3FFF {
             self.ppu.borrow_mut().write(address, value);
+        } else if address >= 0x4000 && address <= 0x4013 {
+            self.apu.borrow_mut().write(address, value);
         } else if address == 0x4014 {
             let start = (value as u16) << 8;
             let mut data = vec![];
@@ -58,10 +66,12 @@ impl Memory for MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(rom: Rc<RefCell<Box<Memory>>>, 
-               ppu: Rc<RefCell<Ppu>>, 
+    pub fn new(rom: Rc<RefCell<Box<Memory>>>,
+               apu: Rc<RefCell<Apu>>,
+               ppu: Rc<RefCell<Ppu>>,
                controllers: Vec<Rc<RefCell<Controller>>>) -> MemoryBus  {
         MemoryBus {
+            apu: apu,
             rom: rom,
             ram: Box::new(Ram::new()) as Box<Memory>,
             ppu: ppu,

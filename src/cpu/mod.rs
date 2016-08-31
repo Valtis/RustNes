@@ -2101,9 +2101,9 @@ pub struct Frequency {
 impl Frequency {
     fn new(tv_system: &TvSystem) -> Frequency {
 
-        let mut divisor:u8;
-        let mut color_freq:f64;
-        let mut master_freq:f64;
+        let divisor:u8;
+        let color_freq:f64;
+        let master_freq:f64;
 
         match *tv_system {
             TvSystem::Uninitialized => panic!("Uninitialized tv system type when initializing cpu"),

@@ -5,6 +5,7 @@ use self::sdl2::event::Event;
 
 use memory::Memory;
 use memory_bus::*;
+use apu::Apu;
 use cpu::Cpu;
 use ppu::Ppu;
 use rom::read_rom;
@@ -19,6 +20,7 @@ use std::cell::RefCell;
 #[derive(Debug)]
 pub struct Console {
     cpu: Cpu,
+    apu: Rc<RefCell<Apu>>,
     memory: Rc<RefCell<Box<Memory>>>,
     ppu: Rc<RefCell<Ppu>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
@@ -63,12 +65,12 @@ impl Console {
         let renderer = SDLRenderer::new(renderer);
 
         let rom = Box::new(read_rom(rom_path));
-        
+
         let controller_one = Rc::new(RefCell::new(Controller::new(None)));
         let controller_two = Rc::new(RefCell::new(Controller::new(None)));
         let controllers = vec![controller_one.clone(), controller_two.clone()];
-        
-                
+
+
         println!("{:#?}", rom.header);
 
         let tv_system = rom.header.tv_system.clone();
@@ -76,18 +78,21 @@ impl Console {
 
         let rom_mem = Rc::new(RefCell::new(rom as Box<Memory>));
         let ppu = Rc::new(RefCell::new(Ppu::new(Box::new(renderer), tv_system.clone(), mirroring, rom_mem.clone())));
+        let apu = Rc::new(RefCell::new(Apu::new()));
 
         let mem = Rc::new(RefCell::new(
             Box::new(
                 MemoryBus::new(
-                    rom_mem.clone(), 
+                    rom_mem.clone(),
+                    apu.clone(),
                     ppu.clone(),
                     controllers.clone(),
                 )
             ) as Box<Memory>));
-        
+
         let mut console = Console {
             memory: mem.clone(),
+            apu: apu.clone(),
             cpu: Cpu::new(&tv_system, mem.clone()),
             ppu: ppu.clone(),
             controllers: controllers.clone(),
@@ -130,14 +135,14 @@ impl Console {
                     Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                         break 'main_loop;
                     },
-                    Event::KeyDown { keycode, ..} => { 
-                        if let Some(key) = keycode {  
+                    Event::KeyDown { keycode, ..} => {
+                        if let Some(key) = keycode {
                             console.controllers[0].borrow_mut().key_down(key);
                             console.controllers[1].borrow_mut().key_down(key);
                         }
                     },
-                    Event::KeyUp { keycode, ..} => { 
-                        if let Some(key) = keycode {  
+                    Event::KeyUp { keycode, ..} => {
+                        if let Some(key) = keycode {
                             console.controllers[0].borrow_mut().key_up(key);
                             console.controllers[1].borrow_mut().key_up(key);
                         }
