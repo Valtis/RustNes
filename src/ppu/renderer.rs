@@ -1,5 +1,10 @@
 extern crate sdl2;
+use self::sdl2::render::{Canvas, TextureCreator};
+use self::sdl2::video::{Window, WindowContext};
+
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
 use self::sdl2::pixels::PixelFormatEnum;
 use self::sdl2::rect::Rect;
 
@@ -20,37 +25,29 @@ impl Pixel {
     }
 }
 
-pub trait Renderer {
-    fn render(&mut self, pixels: &Vec<Pixel>);
+
+pub struct Renderer<'a> {
+    canvas: &'a mut Canvas<Window>,
+    texture: sdl2::render::Texture<'a>,
 }
 
+impl<'a> Renderer<'a> {
+    pub fn new(
+        canvas: &'a mut Canvas<Window>,
+        texture_creator: &'a TextureCreator<WindowContext>) -> Renderer<'a> {
+        let texture = texture_creator
+            .create_texture_streaming(
+                PixelFormatEnum::RGB888, 256, 240).unwrap();
 
-impl fmt::Debug for Renderer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-
-pub struct SDLRenderer<'a> {
-    renderer: sdl2::render::Renderer<'a>,
-    texture: sdl2::render::Texture,
-}
-
-impl<'a> SDLRenderer<'a> {
-    pub fn new(renderer: sdl2::render::Renderer<'a>) -> SDLRenderer<'a> {
-        let texture = renderer.create_texture_streaming(PixelFormatEnum::RGB888, (256, 240)).unwrap();
-        SDLRenderer {
-            renderer: renderer,
+        Renderer {
+            canvas: canvas,
             texture: texture,
         }
     }
-}
 
-impl<'a> Renderer for SDLRenderer<'a> {
-    fn render(&mut self, pixels: &Vec<Pixel>) {
+    pub fn render(&mut self, pixels: &Vec<Pixel>) {
+
         self.texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-
             for y in (0..240) {
                  for x in (0..256) {
                      let pixel = pixels[y * 256 + x].clone();
@@ -63,8 +60,8 @@ impl<'a> Renderer for SDLRenderer<'a> {
              }
          }).unwrap();
 
-        self.renderer.clear();
-        self.renderer.copy(&self.texture, None, Some(Rect::new_unwrap(0, 0, 256*2, 240*2)));
-        self.renderer.present();
+        self.canvas.clear();
+        self.canvas.copy(&self.texture, None, Rect::new(0, 0, 256*2, 240*2));
+        self.canvas.present();
     }
 }

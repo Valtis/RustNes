@@ -12,9 +12,9 @@ use std::cell::RefCell;
 
 // The documentation on behaviour of unofficial opcodes is somewhat inconsistent.
 // Conflicts have been solved by observing existing emulator behaviour (hopefully they got it right)
-#[derive(Debug)]
-pub struct Cpu {
-    memory: Rc<RefCell<Box<Memory>>>, // reference to memory, so that cpu can use it
+
+pub struct Cpu<'a> {
+    memory: Rc<RefCell<Box<Memory +'a>>>, // reference to memory, so that cpu can use it
     pub frequency: Frequency,
     program_counter:u16,
     stack_pointer:u8,
@@ -26,7 +26,7 @@ pub struct Cpu {
     is_odd_cycle: bool, // PPU OAM DMA timing depends on whether cpu is on odd\even cycle
 }
 
-impl Memory for Cpu {
+impl<'a> Memory for Cpu<'a> {
     fn write(&mut self, address:u16, value: u8) {
         if address == 0x4014 { // PPU DMA register - transfer takes time
             self.wait_counter = if self.is_odd_cycle {
@@ -43,8 +43,8 @@ impl Memory for Cpu {
     }
 }
 
-impl Cpu {
-    pub fn new(tv_system: &TvSystem, memory: Rc<RefCell<Box<Memory>>>) -> Cpu {
+impl<'a> Cpu<'a> {
+    pub fn new(tv_system: &TvSystem, memory: Rc<RefCell<Box<Memory + 'a>>>) -> Cpu<'a> {
         Cpu {
             memory: memory,
             frequency: Frequency::new(&tv_system),
@@ -325,8 +325,9 @@ impl Cpu {
             253 => self.subtract_absolute_x(),
             254 => self.increment_memory_absolute_x(),
             255 => self.unofficial_increment_memory_subtract_acc_absolute_x(),
-            _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}, \nCPU status: {:#?}", instruction,
-                self.program_counter - 1, self),
+            _ => panic!("\n\nInvalid opcode {}\nInstruction PC: {}\n",
+                instruction,
+                self.program_counter - 1),
         }
 
         self.is_odd_cycle = !self.is_odd_cycle;

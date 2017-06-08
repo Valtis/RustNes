@@ -50,7 +50,7 @@ impl SpriteRenderData {
     }
 }
 
-pub struct Ppu {
+pub struct Ppu<'a> {
     object_attribute_memory: Vec<u8>,
     secondary_oam: Vec<u8>,
     secondary_contains_sprite_0: bool,
@@ -71,19 +71,19 @@ pub struct Ppu {
     pattern_table_high_byte: u8,
     background_data: u64,
     pixels: Vec<Pixel>,
-    renderer: Box<Renderer>,
+    renderer: Renderer<'a>,
 }
 
 
 
-impl fmt::Debug for Ppu{
+impl<'a> fmt::Debug for Ppu<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{:?}", self.registers));
         write!(f, "<Memory contents not included>")
     }
 }
 
-impl Memory for Ppu {
+impl<'a> Memory for Ppu<'a> {
     fn read(&mut self, cpu_address: u16) -> u8 {
         match cpu_address & 0x0007 {
             0 => panic!("Attempting to read from write-only ppu control register (address 0x{:04X})", cpu_address),
@@ -113,8 +113,8 @@ impl Memory for Ppu {
     }
 }
 
-impl Ppu {
-    pub fn new(renderer: Box<Renderer>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu {
+impl<'a> Ppu<'a> {
+    pub fn new(renderer: Renderer<'a>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu {
         Ppu {
             object_attribute_memory: vec![0;256],
             secondary_oam: vec![0;32],
@@ -161,8 +161,8 @@ impl Ppu {
     }
 
     fn control_register_write(&mut self, value: u8) {
-        self.registers.control = value;      
-        self.registers.temporary = (self.registers.temporary & 0xF3FF) | (self.registers.control as u16 & 0x03) << 10;       
+        self.registers.control = value;
+        self.registers.temporary = (self.registers.temporary & 0xF3FF) | (self.registers.control as u16 & 0x03) << 10;
         self.generate_nmi_if_flags_set();
     }
 
@@ -843,7 +843,7 @@ mod tests {
         ppu.write(0x2000, 0x83);
         assert_eq!(true, ppu.nmi_occured);
     }
-    
+
     #[test]
     fn write_to_0x2000_updates_temporary_register_nametable() {
         let mut ppu = create_test_ppu();

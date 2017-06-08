@@ -5,16 +5,16 @@ use controller::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-pub struct MemoryBus {
+pub struct MemoryBus<'a> {
     rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
-    ppu: Rc<RefCell<Ppu>>,
+    ppu: Rc<RefCell<Ppu<'a>>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
     // TODO: APU
 }
 
 
-impl Memory for MemoryBus {
+impl<'a> Memory for MemoryBus<'a> {
     fn read(&mut self, address: u16) -> u8 {
         if address < 0x2000 {
             self.ram.read(address)
@@ -57,9 +57,9 @@ impl Memory for MemoryBus {
 
 }
 
-impl MemoryBus {
-    pub fn new(rom: Rc<RefCell<Box<Memory>>>, 
-               ppu: Rc<RefCell<Ppu>>, 
+impl<'a> MemoryBus<'a> {
+    pub fn new(rom: Rc<RefCell<Box<Memory>>>,
+               ppu: Rc<RefCell<Ppu<'a>>>,
                controllers: Vec<Rc<RefCell<Controller>>>) -> MemoryBus  {
         MemoryBus {
             rom: rom,
