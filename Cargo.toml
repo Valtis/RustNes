@@ -4,5 +4,5 @@ version = "0.1.0"
 authors = ["Valtis <erkka_kaaria@outlook.com>"]
 
 [dependencies]
-time = "0.1"
-sdl2 = "0.5"	
+time = "*"
+sdl2 = "*"

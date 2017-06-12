@@ -3,23 +3,30 @@ extern crate sdl2;
 use self::sdl2::Sdl;
 use self::sdl2::render::{Canvas, TextureCreator};
 use self::sdl2::video::{Window, WindowContext};
+use self::sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice};
 use self::sdl2::keyboard::Keycode;
 use self::sdl2::event::Event;
+use std::time::Duration;
 
 use memory::Memory;
 use memory_bus::*;
 use cpu::Cpu;
 use ppu::Ppu;
+use apu::Apu;
+use apu::mixer::Mixer;
 use rom::read_rom;
 use ppu::renderer::*;
 use controller::Controller;
 
+
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 
 struct Console<'a> {
     cpu: Cpu<'a>,
     ppu: Rc<RefCell<Ppu<'a>>>,
+    apu: Arc<Mutex<Apu>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
 }
 // borrow checker workarounds
@@ -29,12 +36,13 @@ struct CanvasStruct {
 
 
 
-fn initialize_sdl() -> (Sdl, CanvasStruct, TextureCreator<WindowContext>) {
+fn init_video() -> (Sdl, CanvasStruct, TextureCreator<WindowContext>) {
     let sdl_context = sdl2::init()
         .unwrap_or_else(|e| panic!("Failed to initialize SDL context"));
 
-    let video_subsystem = sdl_context
-        .video().unwrap_or_else(|e| panic!("Failed to initialize SDL video subsystem"));
+    let video_subsystem = sdl_context.video().unwrap_or_else(
+        |e| panic!("Failed to initialize SDL video subsystem: {}", e));
+
 
     // hardcoded resolution for now. TODO: Implement arbitrary resolution & scaling
     let window = video_subsystem.window("RustNes", 256*2, 240*2)
@@ -47,7 +55,7 @@ fn initialize_sdl() -> (Sdl, CanvasStruct, TextureCreator<WindowContext>) {
     let canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
 
-    (sdl_context, CanvasStruct { canvas: canvas }, texture_creator)
+    (sdl_context, CanvasStruct { canvas: canvas }, texture_creator, )
 }
 
 fn initialize_console<'a>(
@@ -76,11 +84,14 @@ fn initialize_console<'a>(
             mirroring,
             rom_mem.clone())));
 
+    let apu = Arc::new(Mutex::new(Apu::new()));
+
     let mem = Rc::new(RefCell::new(
         Box::new(
             MemoryBus::new(
                 rom_mem.clone(),
                 ppu.clone(),
+                apu.clone(),
                 controllers.clone(),
             )
         ) as Box<Memory>));
@@ -88,13 +99,45 @@ fn initialize_console<'a>(
     Console {
         cpu: Cpu::new(&tv_system, mem.clone()),
         ppu: ppu.clone(),
+        apu: apu.clone(),
         controllers: controllers.clone(),
     }
 }
 
+fn init_audio(sdl_context: &Sdl,  apu: Arc<Mutex<Apu>>) -> AudioDevice<Mixer> {
+     let audio_subsystem = sdl_context.audio().unwrap_or_else(
+        |e| panic!("Failed to initialize SDL audio subsystem: {}", e));
+
+
+    let mixer = Mixer::new(apu.clone());
+
+    let desired_spec = AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(1),
+        samples: Some(4096)
+    };
+
+    let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+        // Show obtained AudioSpec
+        println!("{:?}", spec);
+
+        // initialize the audio callback
+        apu
+            .lock()
+            .unwrap_or_else(
+                |e| panic!("Unexpected failure when locking APU for sample rate initialization"))
+            .samples(spec.samples);
+        mixer
+    }).unwrap();
+
+    device
+}
+
 pub fn execute(rom_path: &str) {
-    let (sdl_context, mut canvas, texture_creator) = initialize_sdl();
+    let (sdl_context, mut canvas, texture_creator) = init_video();
     let mut console = initialize_console(rom_path, &mut canvas, &texture_creator);
+    let audio_device = init_audio(&sdl_context, console.apu.clone());
+    audio_device.resume();
 
     let cpu_cycle_time_in_nanoseconds = (1.0/(console.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
     println!("CPU frequency: {}", console.cpu.frequency.cpu_clock_frequency);
@@ -108,6 +151,7 @@ pub fn execute(rom_path: &str) {
     // it is better to execute n cycles every n*500ns as this reduces timer errors.
 
     let cpu_cycles_per_tick = 10;
+    let mut is_even_cycle = false;
     // PAL PPU executes exactly 3.2 cycles for each CPU cycle (vs exactly 3 cycles NTSC).
     // this means we need extra cycle every now an then when emulating PAL to maintaing timing
     //let mut ppu_fractional_cycles = 0.0;
@@ -116,13 +160,18 @@ pub fn execute(rom_path: &str) {
     let mut time = time::precise_time_ns();
     'main_loop: loop {
         let current_time = time::precise_time_ns();
-        let time_taken = current_time - time;
+        let dirty_time_hack = 1.06; // hardcoded value to fix some timing issues
+        let time_taken = (((current_time - time) as f64) * dirty_time_hack) as u64;
 
 
         if time_taken > cpu_cycle_time_in_nanoseconds * cpu_cycles_per_tick {
             for _ in 0..cpu_cycles_per_tick {
-                console.run_emulation_tick();
+                console.run_emulation_tick(is_even_cycle);
+                is_even_cycle = !is_even_cycle;
             }
+            let consumed_time = time::precise_time_ns() - current_time;
+            let expected = cpu_cycle_time_in_nanoseconds*cpu_cycles_per_tick;
+
             time = current_time;
         }
 
@@ -152,7 +201,7 @@ pub fn execute(rom_path: &str) {
 }
 
 impl<'a> Console<'a> {
-    fn run_emulation_tick(&mut self) {
+    fn run_emulation_tick(&mut self, is_even_cycle: bool) {
         // ensure instruction timing
         if self.cpu.wait_counter > 0 {
             self.cpu.wait_counter -= 1;
@@ -161,7 +210,7 @@ impl<'a> Console<'a> {
             let nmi_occured = self.ppu.borrow_mut().nmi_occured();
             if nmi_occured {
                 self.cpu.handle_nmi();
-                return;
+                //return;
             } else {
                 self.cpu.execute_instruction();
             }
@@ -169,6 +218,14 @@ impl<'a> Console<'a> {
         // emulate PPU cycles. Executes 3 cycles (NTSC) or average 3.2 cycles (PAL) per cpu cycle.
         // PAL executes 3 cycles with an additional cycle every few cpu cycles to remain in sync
         self.ppu.borrow_mut().execute_cycles();
+
+        if is_even_cycle {
+            self.apu.lock()
+            .unwrap_or_else(
+                |e| panic!("Unexpected failure when locking APU for cycle execution: {}", e))
+            .execute_cycle();
+        }
+
     }
 
 }

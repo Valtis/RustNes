@@ -1,6 +1,7 @@
 // see http://wiki.nesdev.com/w/index.php/INES for more information
 use std::fs::File;
 use std::io::Read;
+use std::fmt;
 use memory::Memory;
 
 pub fn read_rom(file_path: &str) -> Rom {
@@ -42,12 +43,23 @@ fn read_bytes_from_file_or_panic(length:u64, file: &mut File, err_msg: &str) -> 
     buf
 }
 
+struct RamArray {
+    data: [u8; 0x2000],
+}
+
 #[derive(Debug)]
 pub struct Rom {
     pub header: RomHeader,
     trainer: Vec<u8>, // length is 0 if no trainer is present
     prg_rom_data: Vec<u8>,
     chr_rom_data: Vec<u8>,
+    work_ram: RamArray,
+}
+
+impl fmt::Debug for RamArray {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        self.data[..].fmt(formatter)
+    }
 }
 
 
@@ -77,6 +89,9 @@ impl Memory for Rom {
         // otherwise it's to prg rom
         if address < 0x2000 {
             self.chr_rom_data[address as usize]
+        } else if address >= 0x6000 && address <= 0x7FFF {
+            // work ram on the rom
+            self.work_ram.data[(address - 0x6000) as usize]
         } else {
             let offset = get_offset_temp_hardcoded_impl(self.header.prg_rom_size, address);
             self.prg_rom_data[offset]
@@ -84,9 +99,14 @@ impl Memory for Rom {
     }
 
     fn write(&mut self, address: u16, value: u8) {
-        // TODO: Implement mappers & let them handle this (memory mapped io for mapper registers)
-        // for now, panic on write attempts
-        panic!("Writes are unimplemented for roms (address 0x{:04X}, value: 0x{:04X})", address, value);
+        if address >= 0x6000 && address <= 0x7FFF {
+            // work ram on the rom
+            self.work_ram.data[(address - 0x6000) as usize] = value;
+        } else {
+            panic!("Invalid write into rom memory address space (address 0x{:04X}, value: 0x{:04X})",
+                address,
+                value);
+        }
     }
 }
 
@@ -98,7 +118,9 @@ impl Rom {
             header: RomHeader::new(),
             trainer: vec![],
             prg_rom_data: vec![],
-            chr_rom_data: vec![]
+            chr_rom_data: vec![],
+            work_ram: RamArray { data: [0; 0x2000] },
+
         }
     }
 
