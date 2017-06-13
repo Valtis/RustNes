@@ -78,6 +78,12 @@ impl<'a> Cpu<'a> {
         self.wait_counter = 7;
     }
 
+   pub fn handle_interrupt(&mut self) {
+        if self.status_flags & 0x04 != 0 {
+            return; // interrupts disabled
+        }
+        self.force_interrupt();
+    }
 
     pub fn execute_instruction(&mut self) {
         let pc = self.program_counter;

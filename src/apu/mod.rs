@@ -52,7 +52,7 @@ impl FrameCounter {
          FrameCounter {
             mode: FrameMode::Mode0,
             cycle: 0,
-            interrupt_disabled: false,
+            interrupt_disabled: true,
             interrupt_flag: false,
             even_cycle: false
         }
@@ -116,7 +116,6 @@ impl FrameCounter {
 
     fn interrupt(&mut self) {
         if !self.interrupt_disabled {
-            // panic!("Interrupt flag set but not implemented!");
             self.interrupt_flag = true;
         } else {
 
@@ -143,7 +142,7 @@ pub struct Apu {
 impl Memory for Apu {
     fn read(&mut self,  address: u16) -> u8 {
         if address == APU_STATUS_REGISTER {
-            self.frame_counter.interrupt_flag = false;
+            self.frame_counter.clear_interrupt();
             0 // TODO: Implement
         } else {
             panic!("APU register reads not implemented yet");
@@ -151,7 +150,7 @@ impl Memory for Apu {
     }
 
     fn write(&mut self, address: u16, value: u8) {
-        //println!("Write 0x{:0x} <- {}", address, value);
+
         if address >= 0x4000 && address <= 0x4003 {
             self.pulse_channel_1.write(address, value);
         } else if address >= 0x4004 && address <= 0x4007 {
@@ -276,6 +275,10 @@ impl Apu {
                 self.buffer.clear();
             }
         }
+    }
+
+    pub fn pending_interrupt(&self) -> bool {
+        self.frame_counter.interrupt_flag && !self.frame_counter.interrupt_disabled
     }
 
     fn output(&self) -> f64 {

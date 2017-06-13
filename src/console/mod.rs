@@ -152,7 +152,7 @@ pub fn execute(rom_path: &str) {
     let mut is_even_cycle = false;
     // PAL PPU executes exactly 3.2 cycles for each CPU cycle (vs exactly 3 cycles NTSC).
     // this means we need extra cycle every now an then when emulating PAL to maintaing timing
-    //let mut ppu_fractional_cycles = 0.0;
+
     console.cpu.reset();
 
     let mut time = time::precise_time_ns();
@@ -207,9 +207,12 @@ impl<'a> Console<'a> {
         } else {
             // check for nmi from ppu
             let nmi_occured = self.ppu.borrow_mut().nmi_occured();
+            let apu_irq = self.apu.borrow_mut().pending_interrupt();
             if nmi_occured {
                 self.cpu.handle_nmi();
                 //return;
+            } else if apu_irq {
+                self.cpu.handle_interrupt();
             } else {
                 self.cpu.execute_instruction();
             }
