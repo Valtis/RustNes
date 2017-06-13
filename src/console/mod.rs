@@ -3,7 +3,7 @@ extern crate sdl2;
 use self::sdl2::Sdl;
 use self::sdl2::render::{Canvas, TextureCreator};
 use self::sdl2::video::{Window, WindowContext};
-use self::sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice};
+use self::sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice, AudioQueue};
 use self::sdl2::keyboard::Keycode;
 use self::sdl2::event::Event;
 use std::time::Duration;
@@ -13,7 +13,6 @@ use memory_bus::*;
 use cpu::Cpu;
 use ppu::Ppu;
 use apu::Apu;
-use apu::mixer::Mixer;
 use rom::read_rom;
 use ppu::renderer::*;
 use controller::Controller;
@@ -36,7 +35,8 @@ struct CanvasStruct {
 
 
 
-fn init_video() -> (Sdl, CanvasStruct, TextureCreator<WindowContext>) {
+fn init_sdl() ->
+    (Sdl, CanvasStruct, TextureCreator<WindowContext>, AudioQueue<f32>) {
     let sdl_context = sdl2::init()
         .unwrap_or_else(|e| panic!("Failed to initialize SDL context"));
 
@@ -51,17 +51,32 @@ fn init_video() -> (Sdl, CanvasStruct, TextureCreator<WindowContext>) {
         .build()
         .unwrap();
 
-    // TODO: Solve lifetime issues with initialization
     let canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
 
-    (sdl_context, CanvasStruct { canvas: canvas }, texture_creator, )
+
+    let audio_subsystem = sdl_context.audio().unwrap_or_else(
+        |e| panic!("Failed to initialize SDL audio subsystem: {}", e));
+
+    let desired_spec = AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(1),
+        samples: Some(512)
+    };
+
+    let device = audio_subsystem
+        .open_queue::<f32, _>(None, &desired_spec)
+        .unwrap();
+
+
+    (sdl_context, CanvasStruct { canvas: canvas }, texture_creator, device)
 }
 
 fn initialize_console<'a>(
     rom_path: &str,
     canvas: &'a mut CanvasStruct,
-    texture_creator: &'a TextureCreator<WindowContext>) -> Console<'a> {
+    texture_creator: &'a TextureCreator<WindowContext>,
+    audio_queue: AudioQueue<f32>) -> Console<'a> {
     let rom = Box::new(read_rom(rom_path));
 
     let controller_one = Rc::new(RefCell::new(Controller::new(None)));
@@ -84,7 +99,7 @@ fn initialize_console<'a>(
             mirroring,
             rom_mem.clone())));
 
-    let apu = Arc::new(Mutex::new(Apu::new()));
+    let apu = Arc::new(Mutex::new(Apu::new(audio_queue)));
 
     let mem = Rc::new(RefCell::new(
         Box::new(
@@ -104,40 +119,15 @@ fn initialize_console<'a>(
     }
 }
 
-fn init_audio(sdl_context: &Sdl,  apu: Arc<Mutex<Apu>>) -> AudioDevice<Mixer> {
-     let audio_subsystem = sdl_context.audio().unwrap_or_else(
-        |e| panic!("Failed to initialize SDL audio subsystem: {}", e));
-
-
-    let mixer = Mixer::new(apu.clone());
-
-    let desired_spec = AudioSpecDesired {
-        freq: Some(44100),
-        channels: Some(1),
-        samples: Some(4096)
-    };
-
-    let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
-        // Show obtained AudioSpec
-        println!("{:?}", spec);
-
-        // initialize the audio callback
-        apu
-            .lock()
-            .unwrap_or_else(
-                |e| panic!("Unexpected failure when locking APU for sample rate initialization"))
-            .samples(spec.samples);
-        mixer
-    }).unwrap();
-
-    device
-}
-
 pub fn execute(rom_path: &str) {
-    let (sdl_context, mut canvas, texture_creator) = init_video();
-    let mut console = initialize_console(rom_path, &mut canvas, &texture_creator);
-    let audio_device = init_audio(&sdl_context, console.apu.clone());
-    audio_device.resume();
+    let (sdl_context, mut canvas, texture_creator, audio_queue) = init_sdl();
+    audio_queue.resume();
+    let mut console = initialize_console(
+        rom_path,
+        &mut canvas,
+        &texture_creator, audio_queue);
+  //  let audio_device = init_audio(&sdl_context, console.apu.clone());
+
 
     let cpu_cycle_time_in_nanoseconds = (1.0/(console.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
     println!("CPU frequency: {}", console.cpu.frequency.cpu_clock_frequency);
@@ -158,6 +148,7 @@ pub fn execute(rom_path: &str) {
     console.cpu.reset();
 
     let mut time = time::precise_time_ns();
+
     'main_loop: loop {
         let current_time = time::precise_time_ns();
         let dirty_time_hack = 1.06; // hardcoded value to fix some timing issues

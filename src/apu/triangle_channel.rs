@@ -76,8 +76,6 @@ impl Memory for TriangleChannel {
             self.linear_counter.reload = true;
         }
     }
-
-
 }
 
 impl TriangleChannel {

@@ -1,12 +1,11 @@
+extern crate sdl2;
+use self::sdl2::audio::{AudioQueue};
+
 mod pulse_channel;
 mod triangle_channel;
 mod envelope;
 mod length_counter;
 mod timer;
-
-pub mod mixer;
-
-use self::mixer::Mixer;
 
 use memory::Memory;
 
@@ -15,6 +14,8 @@ use self::triangle_channel::TriangleChannel;
 use self::envelope::Envelope;
 
 use std::collections::VecDeque;
+
+
 
 const APU_STATUS_REGISTER : u16 = 0x4015;
 const FRAME_COUNTER_REGISTER : u16 = 0x4017;
@@ -132,8 +133,9 @@ pub struct Apu {
     pulse_channel_2: PulseChannel,
     triangle_channel: TriangleChannel,
     frame_counter: FrameCounter,
-    ring_buffer: VecDeque<f32>,
+    buffer: Vec<f32>,
     tmp_cycle: usize,
+    audio_queue: AudioQueue<f32>
 }
 
 impl Memory for Apu {
@@ -193,19 +195,20 @@ impl Memory for Apu {
 }
 
 impl Apu {
-    pub fn new() -> Apu {
+    pub fn new(audio_queue: AudioQueue<f32>) -> Apu {
         Apu {
             pulse_channel_1: PulseChannel::new(Complement::One),
             pulse_channel_2: PulseChannel::new(Complement::Two),
             triangle_channel: TriangleChannel::new(),
             frame_counter: FrameCounter::new(),
-            ring_buffer: VecDeque::new(),
+            buffer: vec![],
             tmp_cycle: 0,
+            audio_queue: audio_queue,
         }
     }
 
     pub fn samples(&mut self, samples: u16) {
-        self.ring_buffer.resize(samples as usize, 0.0);
+        self.buffer.resize(samples as usize, 0.0);
     }
 
     pub fn execute_cycle(&mut self) {
@@ -243,23 +246,29 @@ impl Apu {
         self.tmp_cycle += 1;
         // get samples every ~ (apu cycle) / (sample rate) / 2
         // (apu cycle -> 2 cpu cycles)
-        if  self.tmp_cycle == 20 {
+        if self.tmp_cycle == 20 {
             let output = self.output() as f32;
-            self.append_buf(output);
+            self.buffer.push(output);
+          //  self.append_buf(output);
             self.tmp_cycle = 0;
+
+            if self.buffer.len() == 512 {
+                self.audio_queue.queue(self.buffer.as_slice());
+                self.buffer.clear();
+            }
         }
     }
-
+/*
     fn append_buf(&mut self, value: f32) {
         self.ring_buffer.pop_front();
         self.ring_buffer.push_back(value);
     }
 
-    pub fn write_buf(&self, out_buf: &mut [f32]) {
+    pub fn write_buf(&mut self, out_buf: &mut [f32]) {
         for (x, y) in out_buf.iter_mut().zip(self.ring_buffer.iter()) {
             *x = *y;
         }
-    }
+    }*/
 
     fn output(&self) -> f64 {
         let pulse_output =
