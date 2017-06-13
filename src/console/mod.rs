@@ -20,12 +20,14 @@ use controller::Controller;
 
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+
+const SAMPLE_RATE: i32 = 44100;
+const SAMPLES: u16= 2048;
 
 struct Console<'a> {
     cpu: Cpu<'a>,
     ppu: Rc<RefCell<Ppu<'a>>>,
-    apu: Arc<Mutex<Apu>>,
+    apu: Rc<RefCell<Apu>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
 }
 // borrow checker workarounds
@@ -59,9 +61,9 @@ fn init_sdl() ->
         |e| panic!("Failed to initialize SDL audio subsystem: {}", e));
 
     let desired_spec = AudioSpecDesired {
-        freq: Some(44100),
+        freq: Some(SAMPLE_RATE),
         channels: Some(1),
-        samples: Some(512)
+        samples: Some(SAMPLES)
     };
 
     let device = audio_subsystem
@@ -99,7 +101,8 @@ fn initialize_console<'a>(
             mirroring,
             rom_mem.clone())));
 
-    let apu = Arc::new(Mutex::new(Apu::new(audio_queue)));
+    let apu = Rc::new(RefCell::new(Apu::new(audio_queue)));
+    apu.borrow_mut().samples(SAMPLES/2);
 
     let mem = Rc::new(RefCell::new(
         Box::new(
@@ -111,8 +114,15 @@ fn initialize_console<'a>(
             )
         ) as Box<Memory>));
 
+    let cpu = Cpu::new(&tv_system, mem.clone());
+
+    apu.borrow_mut()
+        .set_sampling_rate(
+            cpu.frequency.cpu_clock_frequency,
+            SAMPLE_RATE);
+
     Console {
-        cpu: Cpu::new(&tv_system, mem.clone()),
+        cpu: cpu,
         ppu: ppu.clone(),
         apu: apu.clone(),
         controllers: controllers.clone(),
@@ -126,8 +136,6 @@ pub fn execute(rom_path: &str) {
         rom_path,
         &mut canvas,
         &texture_creator, audio_queue);
-  //  let audio_device = init_audio(&sdl_context, console.apu.clone());
-
 
     let cpu_cycle_time_in_nanoseconds = (1.0/(console.cpu.frequency.cpu_clock_frequency/1000.0)) as u64;
     println!("CPU frequency: {}", console.cpu.frequency.cpu_clock_frequency);
@@ -211,10 +219,7 @@ impl<'a> Console<'a> {
         self.ppu.borrow_mut().execute_cycles();
 
         if is_even_cycle {
-            self.apu.lock()
-            .unwrap_or_else(
-                |e| panic!("Unexpected failure when locking APU for cycle execution: {}", e))
-            .execute_cycle();
+            self.apu.borrow_mut().execute_cycle();
         }
 
     }

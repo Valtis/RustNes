@@ -134,7 +134,9 @@ pub struct Apu {
     triangle_channel: TriangleChannel,
     frame_counter: FrameCounter,
     buffer: Vec<f32>,
-    tmp_cycle: usize,
+    sample_cycle: usize,
+    cycles_per_sample: usize,
+    max_samples_before_clearing_buffer: usize,
     audio_queue: AudioQueue<f32>
 }
 
@@ -202,16 +204,31 @@ impl Apu {
             triangle_channel: TriangleChannel::new(),
             frame_counter: FrameCounter::new(),
             buffer: vec![],
-            tmp_cycle: 0,
+            sample_cycle: 0,
+            cycles_per_sample: 0,
+            max_samples_before_clearing_buffer: 0,
             audio_queue: audio_queue,
         }
     }
 
     pub fn samples(&mut self, samples: u16) {
         self.buffer.resize(samples as usize, 0.0);
+        self.max_samples_before_clearing_buffer = samples as usize;
+    }
+
+    pub fn set_sampling_rate(&mut self, cpu_frequency: f64, sample_rate: i32) {
+        let cpu_cycles_per_apu_cycle = 2.0;
+        self.cycles_per_sample =
+            ((cpu_frequency*1000_000.0 / cpu_cycles_per_apu_cycle)
+            / sample_rate as f64) as usize;
     }
 
     pub fn execute_cycle(&mut self) {
+        self.emulate_channels();
+        self.gather_sample();
+    }
+
+    fn emulate_channels(&mut self) {
         match self.frame_counter.cycle() {
             CycleState::QuarterFrameCycle => {
                 self.pulse_channel_1.cycle_envelope();
@@ -242,33 +259,24 @@ impl Apu {
         // triangle channel timer cycles twice for each apu cycle
         self.triangle_channel.cycle_timer();
         self.triangle_channel.cycle_timer();
+    }
 
-        self.tmp_cycle += 1;
+    fn gather_sample(&mut self) {
+        self.sample_cycle += 1;
         // get samples every ~ (apu cycle) / (sample rate) / 2
         // (apu cycle -> 2 cpu cycles)
-        if self.tmp_cycle == 20 {
+        if self.sample_cycle >= self.cycles_per_sample {
             let output = self.output() as f32;
             self.buffer.push(output);
           //  self.append_buf(output);
-            self.tmp_cycle = 0;
+            self.sample_cycle = 0;
 
-            if self.buffer.len() == 512 {
+            if self.buffer.len() >= self.max_samples_before_clearing_buffer {
                 self.audio_queue.queue(self.buffer.as_slice());
                 self.buffer.clear();
             }
         }
     }
-/*
-    fn append_buf(&mut self, value: f32) {
-        self.ring_buffer.pop_front();
-        self.ring_buffer.push_back(value);
-    }
-
-    pub fn write_buf(&mut self, out_buf: &mut [f32]) {
-        for (x, y) in out_buf.iter_mut().zip(self.ring_buffer.iter()) {
-            *x = *y;
-        }
-    }*/
 
     fn output(&self) -> f64 {
         let pulse_output =
@@ -281,13 +289,5 @@ impl Apu {
 
         let tnd_output = 0.00851 * self.triangle_channel.output() + 0.00494 * noise_output + 0.00335 * dmc_output;
         pulse_output + tnd_output
-    }
-
-    pub fn pulse1_output(&self) -> f64 {
-        self.pulse_channel_1.output()
-    }
-
-    pub fn pulse2_output(&self) -> f64 {
-        self.pulse_channel_2.output()
     }
 }

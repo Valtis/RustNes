@@ -5,13 +5,12 @@ use apu::*;
 use controller::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
 
 pub struct MemoryBus<'a> {
     rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
     ppu: Rc<RefCell<Ppu<'a>>>,
-    apu: Arc<Mutex<Apu>>,
+    apu: Rc<RefCell<Apu>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
 }
 
@@ -27,11 +26,7 @@ impl<'a> Memory for MemoryBus<'a> {
         } else if address == 0x04017 {
             self.controllers[1].borrow_mut().read(address)
         } else if (address >= 0x4000 && address <= 0x4015) || address == 0x4017 {
-            self.apu
-            .lock()
-            .unwrap_or_else(
-                |e| panic!("Unexpected failure when locking APU for reading: {}", e))
-            .read(address)
+            self.apu.borrow_mut().read(address)
         } else if address >= 0x4020 {
             self.rom.borrow_mut().read(address)
         } else {
@@ -57,10 +52,7 @@ impl<'a> Memory for MemoryBus<'a> {
             self.controllers[0].borrow_mut().write(address, value);
             self.controllers[1].borrow_mut().write(address, value);
         } else if (address >= 0x4000 && address <= 0x4015) || address == 0x4017 {
-            self.apu.lock()
-            .unwrap_or_else(
-                |e| panic!("Unexpected failure when locking APU for writing: {}", e))
-            .write(address, value);
+            self.apu.borrow_mut().write(address, value);
         } else if address >= 0x4020 {
             self.rom.borrow_mut().write(address, value);
         }
@@ -71,7 +63,7 @@ impl<'a> Memory for MemoryBus<'a> {
 impl<'a> MemoryBus<'a> {
     pub fn new(rom: Rc<RefCell<Box<Memory>>>,
                ppu: Rc<RefCell<Ppu<'a>>>,
-               apu: Arc<Mutex<Apu>>,
+               apu: Rc<RefCell<Apu>>,
                controllers: Vec<Rc<RefCell<Controller>>>) -> MemoryBus  {
         MemoryBus {
             rom: rom,
