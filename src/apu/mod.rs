@@ -21,17 +21,8 @@ use std::collections::VecDeque;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-
 const APU_STATUS_REGISTER : u16 = 0x4015;
 const FRAME_COUNTER_REGISTER : u16 = 0x4017;
-/*
-
-TODO:
-    * Implement triangle wave, noise, dmc channels
-    * Implement SDL backend
-    * Verify that register writes into pulse channels do the right things
-        * Write into 0x4003/0x4007 should reset phase
-*/
 
 enum FrameMode {
     Mode0, // 4 step mode
