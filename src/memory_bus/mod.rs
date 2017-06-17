@@ -10,7 +10,7 @@ pub struct MemoryBus<'a> {
     rom: Rc<RefCell<Box<Memory>>>,
     ram: Box<Memory>,
     ppu: Rc<RefCell<Ppu<'a>>>,
-    apu: Rc<RefCell<Apu>>,
+    apu: Rc<RefCell<Apu<'a>>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
 }
 
@@ -63,8 +63,8 @@ impl<'a> Memory for MemoryBus<'a> {
 impl<'a> MemoryBus<'a> {
     pub fn new(rom: Rc<RefCell<Box<Memory>>>,
                ppu: Rc<RefCell<Ppu<'a>>>,
-               apu: Rc<RefCell<Apu>>,
-               controllers: Vec<Rc<RefCell<Controller>>>) -> MemoryBus  {
+               apu: Rc<RefCell<Apu<'a>>>,
+               controllers: Vec<Rc<RefCell<Controller>>>) -> MemoryBus<'a>  {
         MemoryBus {
             rom: rom,
             ram: Box::new(Ram::new()) as Box<Memory>,

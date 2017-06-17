@@ -38,7 +38,8 @@ struct Sweep {
     enabled: bool,
     negate: bool,
     reload: bool,
-    complement: Complement
+    complement: Complement,
+    last_change: u16,
 }
 
 impl Sweep {
@@ -51,12 +52,14 @@ impl Sweep {
             negate: false,
             reload: false,
             complement: complement,
+            last_change: 0,
         }
     }
 
     fn cycle(&mut self) -> SweepCycle {
 
         if self.reload {
+            self.reload = false;
             let old_val = self.counter;
             self.counter = self.length;
 
@@ -77,8 +80,8 @@ impl Sweep {
         SweepCycle::NormalCycle
     }
 
-    fn sweep_amount(&self, base: u16) -> i16 {
-        let mut sweep = (base << self.shift) as i16;
+    fn sweep_amount(&mut self, base: u16) -> i16 {
+        let mut sweep = (base >> self.shift) as i16;
         if self.negate {
             if self.complement == Complement::One {
                 return -sweep - 1;
@@ -86,6 +89,8 @@ impl Sweep {
                 return -sweep;
             }
         }
+
+        self.last_change = sweep as u16;
         sweep
     }
 }
@@ -139,13 +144,11 @@ impl Memory for PulseChannel {
             let negate_flag = (0b0000_1000 & value) != 0;
             let shift_count = (0b0000_0111 & value);
 
-
             self.sweep.enabled = sweep_enable;
             self.sweep.length = divider_period + 1;
             self.sweep.negate = negate_flag;
             self.sweep.shift = shift_count;
             self.sweep.reload = true;
-
 
         } else if address == 0x04002 || address == 0x4006 {
             let timer_low_bits = value;
@@ -158,10 +161,11 @@ impl Memory for PulseChannel {
 
             self.envelope.restart_envelope();
             self.timer.set_high_bits(timer_high_bits);
-            // TODO: reset phase
+            self.duty.duty_position = 0;
 
         } else {
-            unimplemented!();
+            panic!("Invald write to pulse channel address {:0x}",
+                address);
         }
     }
 }
@@ -170,7 +174,7 @@ impl PulseChannel {
     pub fn new(complement: Complement) -> PulseChannel {
         PulseChannel {
             duty: Duty { duty_cycle: 0, duty_position: 0 },
-            length_counter: LengthCounter::new(0),
+            length_counter: LengthCounter::new(),
             timer: Timer::new(),
             envelope: Envelope::new(),
             sweep: Sweep::new(complement),
@@ -198,18 +202,26 @@ impl PulseChannel {
 
     pub fn cycle_sweep_unit(&mut self) {
         if self.sweep.cycle() == SweepCycle::ZeroCycle {
-
             let change = self.sweep.sweep_amount(self.timer.length);
+
+            if change > 2047 {
+                return;
+            }
+
             self.timer.length = (self.timer.length as i16 + change) as u16
                 & 0b0000_0111_1111_1111;
         }
+    }
+
+    pub fn length_counter_nonzero(&self) -> bool {
+        self.length_counter.counter > 0
     }
 
     pub fn output(&self) -> f64 {
         if !self.enabled
             || self.length_counter.silenced()
             || self.timer.length < 8
-            || self.sweep.length < 8 {
+            || self.sweep.last_change > 2047 {
             return 0.0;
         }
 

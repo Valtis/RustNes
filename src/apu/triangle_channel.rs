@@ -49,7 +49,8 @@ pub struct TriangleChannel {
 impl Memory for TriangleChannel {
 
     fn read(&mut self, address: u16) ->  u8 {
-        panic!("Invalid read attempt of triangle channel register {}", address);
+        panic!("Invalid read attempt of triangle channel register {:0x}",
+            address);
     }
 
     fn write(&mut self, address: u16, value: u8) {
@@ -61,7 +62,8 @@ impl Memory for TriangleChannel {
 
             let counter_reload = (0b0111_1111 & value);
             self.linear_counter.length = counter_reload;
-
+        } else if address == 0x4009 {
+            /* unused */
         } else if address == 0x400A {
             let timer_low_bits = value;
             self.timer.set_low_bits(timer_low_bits);
@@ -74,6 +76,9 @@ impl Memory for TriangleChannel {
             self.timer.set_high_bits(timer_high_bits);
 
             self.linear_counter.reload = true;
+        } else {
+            panic!("Invalid write to triangle channel address {:0x}",
+                address);
         }
     }
 }
@@ -83,7 +88,7 @@ impl TriangleChannel {
     pub fn new() -> TriangleChannel {
         TriangleChannel {
             timer: Timer::new(),
-            length_counter: LengthCounter::new(0),
+            length_counter: LengthCounter::new(),
             linear_counter: LinearCounter::new(),
             sequence: 0,
             enabled: false,
@@ -122,4 +127,7 @@ impl TriangleChannel {
         self.length_counter.cycle();
     }
 
+    pub fn length_counter_nonzero(&self) -> bool {
+        self.length_counter.counter > 0
+    }
 }

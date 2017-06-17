@@ -33,4 +33,8 @@ impl Timer {
         self.length = (self.length & 0b0000_0111_0000_0000)
             | value as u16;
     }
+
+    pub fn set_period(&mut self, period: u16) {
+        self.length = period;
+    }
 }

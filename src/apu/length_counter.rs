@@ -15,10 +15,10 @@ pub struct LengthCounter {
 }
 
 impl LengthCounter {
-    pub fn new(initial_value: u8) -> LengthCounter {
+    pub fn new() -> LengthCounter {
         LengthCounter {
-            length: initial_value,
-            counter: initial_value,
+            length: 0,
+            counter: 0,
             halted: false,
         }
     }

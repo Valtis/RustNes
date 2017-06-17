@@ -27,7 +27,7 @@ const SAMPLES: u16= 2048;
 struct Console<'a> {
     cpu: Cpu<'a>,
     ppu: Rc<RefCell<Ppu<'a>>>,
-    apu: Rc<RefCell<Apu>>,
+    apu: Rc<RefCell<Apu<'a>>>,
     controllers: Vec<Rc<RefCell<Controller>>>,
 }
 // borrow checker workarounds
@@ -114,6 +114,7 @@ fn initialize_console<'a>(
             )
         ) as Box<Memory>));
 
+    apu.borrow_mut().set_memory(mem.clone());
     let cpu = Cpu::new(&tv_system, mem.clone());
 
     apu.borrow_mut()
@@ -156,22 +157,21 @@ pub fn execute(rom_path: &str) {
     console.cpu.reset();
 
     let mut time = time::precise_time_ns();
-
+    let cycle_time = cpu_cycle_time_in_nanoseconds * cpu_cycles_per_tick;
+    println!("Nanoseconds between cycling: {}", cycle_time);
     'main_loop: loop {
         let current_time = time::precise_time_ns();
-        let dirty_time_hack = 1.06; // hardcoded value to fix some timing issues
-        let time_taken = (((current_time - time) as f64) * dirty_time_hack) as u64;
+        let time_taken = current_time - time;
 
 
-        if time_taken > cpu_cycle_time_in_nanoseconds * cpu_cycles_per_tick {
+        if time_taken > cycle_time {
             for _ in 0..cpu_cycles_per_tick {
                 console.run_emulation_tick(is_even_cycle);
                 is_even_cycle = !is_even_cycle;
             }
             let consumed_time = time::precise_time_ns() - current_time;
-            let expected = cpu_cycle_time_in_nanoseconds*cpu_cycles_per_tick;
 
-            time = current_time;
+            time = current_time - (time_taken - cycle_time);
         }
 
         let mut event_pump = sdl_context.event_pump().unwrap();
@@ -210,7 +210,6 @@ impl<'a> Console<'a> {
             let apu_irq = self.apu.borrow_mut().pending_interrupt();
             if nmi_occured {
                 self.cpu.handle_nmi();
-                //return;
             } else if apu_irq {
                 self.cpu.handle_interrupt();
             } else {
