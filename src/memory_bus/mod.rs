@@ -78,16 +78,21 @@ impl<'a> MemoryBus<'a> {
 
 #[cfg(test)]
 mod tests {
+
+    extern crate sdl2;
+
     use super::*;
     use memory::*;
     use ppu::*;
     use rom::*;
     use ppu::renderer::*;
+    use apu::{Apu, Audio};
     use std::cell::RefCell;
     use std::rc::Rc;
+    use self::sdl2::audio::{AudioQueue};
+
 
     // 64 kilobytes of memory, no mapped addresses
-
     struct MockRenderer;
 
     impl MockRenderer {
@@ -124,7 +129,7 @@ mod tests {
     }
 
     // few helpers
-    impl MemoryBus {
+    impl<'a> MemoryBus<'a> {
         fn assert_value_present_in_ram_only(&mut self, address: u16, value: u8) {
             assert_eq!(value, self.ram.read(address));
             assert!(self.rom.borrow_mut().read(address) != value);
@@ -136,16 +141,34 @@ mod tests {
         }
     }
 
-    fn create_test_memory_bus() -> MemoryBus {
+    fn create_test_memory_bus<'a>() -> MemoryBus<'a> {
+
         let rom = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
         MemoryBus {
             rom: rom.clone(),
             ram: Box::new(MockMemory::new()),
             ppu: Rc::new(RefCell::new(Ppu::new(Box::new(MockRenderer::new()), TvSystem::NTSC, Mirroring::VerticalMirroring, rom.clone()))),
             controllers: vec![],
+            apu: Rc::new(RefCell::new(Apu::new(Box::new(MockAudio::new())))),
         }
     }
 
+    struct MockAudio {
+    }
+
+    impl MockAudio {
+        fn new() -> MockAudio {
+            MockAudio {
+
+            }
+        }
+    }
+
+    impl Audio<f32> for MockAudio {
+        fn queue(&mut self, slice: &[f32]) {
+
+        }
+    }
 
     #[test]
     fn write_under_0x2000_is_redirected_to_ram() {

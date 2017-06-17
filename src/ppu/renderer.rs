@@ -25,27 +25,32 @@ impl Pixel {
     }
 }
 
+pub trait Renderer {
+    fn render(&mut self, pixels: &Vec<Pixel>);
+}
 
-pub struct Renderer<'a> {
+pub struct SDLRenderer<'a> {
     canvas: &'a mut Canvas<Window>,
     texture: sdl2::render::Texture<'a>,
 }
 
-impl<'a> Renderer<'a> {
+impl<'a> SDLRenderer<'a> {
     pub fn new(
         canvas: &'a mut Canvas<Window>,
-        texture_creator: &'a TextureCreator<WindowContext>) -> Renderer<'a> {
+        texture_creator: &'a TextureCreator<WindowContext>) -> SDLRenderer<'a> {
         let texture = texture_creator
             .create_texture_streaming(
                 PixelFormatEnum::RGB888, 256, 240).unwrap();
 
-        Renderer {
+        SDLRenderer {
             canvas: canvas,
             texture: texture,
         }
     }
+}
 
-    pub fn render(&mut self, pixels: &Vec<Pixel>) {
+impl<'a> Renderer for SDLRenderer<'a> {
+    fn render(&mut self, pixels: &Vec<Pixel>) {
 
         self.texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
             for y in (0..240) {

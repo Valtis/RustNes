@@ -12,7 +12,7 @@ use memory::Memory;
 use memory_bus::*;
 use cpu::Cpu;
 use ppu::Ppu;
-use apu::Apu;
+use apu::{Apu, SDLAudio};
 use rom::read_rom;
 use ppu::renderer::*;
 use controller::Controller;
@@ -92,16 +92,19 @@ fn initialize_console<'a>(
     let mirroring = rom.header.mirroring.clone();
 
     let rom_mem = Rc::new(RefCell::new(rom as Box<Memory>));
+    let renderer = Box::new(SDLRenderer::new(
+                &mut canvas.canvas,
+                &texture_creator));
+
     let ppu = Rc::new(RefCell::new(
         Ppu::new(
-            Renderer::new(
-                &mut canvas.canvas,
-                &texture_creator),
+            renderer,
             tv_system.clone(),
             mirroring,
             rom_mem.clone())));
 
-    let apu = Rc::new(RefCell::new(Apu::new(audio_queue)));
+    let audio_box = Box::new(SDLAudio::new(audio_queue));
+    let apu = Rc::new(RefCell::new(Apu::new(audio_box)));
     apu.borrow_mut().samples(SAMPLES/2);
 
     let mem = Rc::new(RefCell::new(

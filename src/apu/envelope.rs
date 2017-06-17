@@ -230,7 +230,7 @@ mod tests {
 		envelope.constant_volume = true;
 		envelope.divider.length = 20;
 		envelope.cycle();
-		assert_eq!(19, envelope.volume());
+		assert_eq!(20, envelope.volume());
 	}
 
 	#[test]

@@ -2168,7 +2168,7 @@ mod tests {
         }
     }
 
-    fn create_test_cpu() -> Cpu {
+    fn create_test_cpu<'a>() -> Cpu<'a> {
         let memory = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
         Cpu::new(&TvSystem::NTSC, memory)
     }

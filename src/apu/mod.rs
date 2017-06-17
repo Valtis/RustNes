@@ -1,5 +1,5 @@
 extern crate sdl2;
-use self::sdl2::audio::{AudioQueue};
+use self::sdl2::audio::{AudioQueue, AudioFormatNum};
 
 mod pulse_channel;
 mod triangle_channel;
@@ -115,6 +115,30 @@ impl FrameCounter {
     }
 }
 
+// for mocking, primarily
+pub trait Audio<T : AudioFormatNum> {
+    fn queue(&mut self, slice: &[T]);
+}
+
+pub struct SDLAudio<T : AudioFormatNum> {
+    audio_queue: AudioQueue<T>
+}
+
+impl<T : AudioFormatNum> SDLAudio<T> {
+    pub fn new(queue: AudioQueue<T>) -> SDLAudio<T> {
+        SDLAudio {
+            audio_queue: queue,
+        }
+    }
+}
+
+impl<T : AudioFormatNum> Audio<T> for SDLAudio<T> {
+    fn queue(&mut self, slice: &[T]) {
+        self.audio_queue.queue(slice);
+    }
+}
+
+
 pub struct Apu<'a> {
     pulse_channel_1: PulseChannel,
     pulse_channel_2: PulseChannel,
@@ -126,7 +150,7 @@ pub struct Apu<'a> {
     sample_cycle: f64,
     cycles_per_sample: f64,
     max_samples_before_clearing_buffer: usize,
-    audio_queue: AudioQueue<f32>
+    audio_queue: Box<Audio<f32>>,
 }
 
 impl<'a> Memory for Apu<'a> {
@@ -222,7 +246,7 @@ impl<'a> Memory for Apu<'a> {
 }
 
 impl<'a> Apu<'a> {
-    pub fn new(audio_queue: AudioQueue<f32>) -> Apu<'a> {
+    pub fn new(audio_queue: Box<Audio<f32>>) -> Apu<'a> {
         Apu {
             pulse_channel_1: PulseChannel::new(Complement::One),
             pulse_channel_2: PulseChannel::new(Complement::Two),

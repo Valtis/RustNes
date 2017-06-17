@@ -231,14 +231,3 @@ impl PulseChannel {
     }
 }
 
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-	fn create_test_length_counter() -> LengthCounter {
-		LengthCounter::new(50)
-	}
-
-}

@@ -71,7 +71,7 @@ pub struct Ppu<'a> {
     pattern_table_high_byte: u8,
     background_data: u64,
     pixels: Vec<Pixel>,
-    renderer: Renderer<'a>,
+    renderer: Box<Renderer + 'a>,
 }
 
 
@@ -114,7 +114,12 @@ impl<'a> Memory for Ppu<'a> {
 }
 
 impl<'a> Ppu<'a> {
-    pub fn new(renderer: Renderer<'a>, tv_system: TvSystem, mirroring: Mirroring, rom: Rc<RefCell<Box<Memory>>>) -> Ppu {
+    pub fn new(
+        renderer: Box<Renderer + 'a>,
+        tv_system: TvSystem,
+        mirroring: Mirroring,
+        rom: Rc<RefCell<Box<Memory>>>) -> Ppu<'a> {
+
         Ppu {
             object_attribute_memory: vec![0;256],
             secondary_oam: vec![0;32],
@@ -820,7 +825,7 @@ mod tests {
         }
     }
 
-    fn create_test_ppu() -> Ppu {
+    fn create_test_ppu<'a>() -> Ppu<'a> {
         let rom = Rc::new(RefCell::new(Box::new(MockMemory::new()) as Box<Memory>));
         let mut ppu = Ppu::new(Box::new(MockRenderer::new()), TvSystem::NTSC, Mirroring::VerticalMirroring, rom);
         // replace vram with mock
