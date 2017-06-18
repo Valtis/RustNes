@@ -153,7 +153,6 @@ pub fn execute(rom_path: &str) {
     // it is better to execute n cycles every n*500ns as this reduces timer errors.
 
     let cpu_cycles_per_tick = 10;
-    let mut is_even_cycle = false;
     // PAL PPU executes exactly 3.2 cycles for each CPU cycle (vs exactly 3 cycles NTSC).
     // this means we need extra cycle every now an then when emulating PAL to maintaing timing
 
@@ -169,8 +168,7 @@ pub fn execute(rom_path: &str) {
 
         if time_taken > cycle_time {
             for _ in 0..cpu_cycles_per_tick {
-                console.run_emulation_tick(is_even_cycle);
-                is_even_cycle = !is_even_cycle;
+                console.run_emulation_tick();
             }
             let consumed_time = time::precise_time_ns() - current_time;
 
@@ -203,28 +201,35 @@ pub fn execute(rom_path: &str) {
 }
 
 impl<'a> Console<'a> {
-    fn run_emulation_tick(&mut self, is_even_cycle: bool) {
+    fn run_emulation_tick(&mut self) {
         // ensure instruction timing
         if self.cpu.wait_counter > 0 {
             self.cpu.wait_counter -= 1;
         } else {
             // check for nmi from ppu
             let nmi_occured = self.ppu.borrow_mut().nmi_occured();
-            let apu_irq = self.apu.borrow_mut().pending_interrupt();
+            let irq_line = self.apu.borrow_mut().pending_interrupt();
+            self.cpu.set_interrupt_line(irq_line);
             if nmi_occured {
                 self.cpu.handle_nmi();
-            } else if apu_irq {
-                self.cpu.handle_interrupt();
             } else {
                 self.cpu.execute_instruction();
+                // lazy fix for off-by-one error in timings
+                if self.cpu.wait_counter > 0 {
+                    self.cpu.wait_counter -= 1;
+                }
             }
         }
         // emulate PPU cycles. Executes 3 cycles (NTSC) or average 3.2 cycles (PAL) per cpu cycle.
         // PAL executes 3 cycles with an additional cycle every few cpu cycles to remain in sync
         self.ppu.borrow_mut().execute_cycles();
-
-        if is_even_cycle {
-            self.apu.borrow_mut().execute_cycle();
+        // apu strictly speaking cycles once for each two cpu cycle, but for
+        // timing reasons we cycle it once per cpu cycle. apu handles
+        // this difference internally
+        self.apu.borrow_mut().execute_cycle();
+        let delay = self.apu.borrow_mut().delay_cpu() as u16;
+        if  delay > 0 && self.cpu.wait_counter < delay {
+            self.cpu.wait_counter = delay ;
         }
 
     }

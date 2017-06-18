@@ -1,6 +1,7 @@
 use apu::envelope::Envelope;
 use apu::timer::{Timer, TimerCycle};
 use apu::length_counter::LengthCounter;
+use apu::sweep::{Sweep, Complement, SweepCycle};
 use memory::Memory;
 
 
@@ -19,82 +20,6 @@ static DUTY_CYCLES: [[u8; 8]; 4] = [
 	[1, 0, 0, 1, 1, 1, 1, 1],
 ];
 
-#[derive(PartialEq)]
-pub enum Complement {
-    One,
-    Two,
-}
-
-#[derive(PartialEq)]
-enum SweepCycle {
-    ZeroCycle,
-    NormalCycle
-}
-
-struct Sweep {
-    counter: u8,
-    length: u8,
-    shift: u8,
-    enabled: bool,
-    negate: bool,
-    reload: bool,
-    complement: Complement,
-    last_change: u16,
-}
-
-impl Sweep {
-    fn new(complement: Complement) -> Sweep {
-        Sweep {
-            counter: 0,
-            length: 0,
-            shift: 0,
-            enabled: false,
-            negate: false,
-            reload: false,
-            complement: complement,
-            last_change: 0,
-        }
-    }
-
-    fn cycle(&mut self) -> SweepCycle {
-
-        if self.reload {
-            self.reload = false;
-            let old_val = self.counter;
-            self.counter = self.length;
-
-            if old_val == 0 && self.enabled {
-                return SweepCycle::ZeroCycle;
-            }
-
-            return SweepCycle::NormalCycle;
-        }
-
-        if self.counter > 0 && !self.reload {
-            self.counter -= 1;
-        } else if self.counter == 0 && !self.reload && self.enabled  {
-            self.counter = self.length;
-            return SweepCycle::ZeroCycle;
-        }
-
-        SweepCycle::NormalCycle
-    }
-
-    fn sweep_amount(&mut self, base: u16) -> i16 {
-        let mut sweep = (base >> self.shift) as i16;
-        if self.negate {
-            if self.complement == Complement::One {
-                return -sweep - 1;
-            } else {
-                return -sweep;
-            }
-        }
-
-        self.last_change = sweep as u16;
-        sweep
-    }
-}
-
 // selected duty cycle and the current position
 struct Duty {
 	duty_cycle: usize,
@@ -102,6 +27,10 @@ struct Duty {
 }
 
 impl Duty {
+    fn new() ->  Duty {
+         Duty { duty_cycle: 0, duty_position: 0 }
+    }
+
     fn cycle(&mut self) {
         if self.duty_position > 0 {
             self.duty_position -= 1;
@@ -115,8 +44,8 @@ pub struct PulseChannel {
 	duty: Duty,
 	length_counter: LengthCounter,
 	timer: Timer,
-	envelope: Envelope,
-    sweep: Sweep,
+	pub envelope: Envelope,
+    pub sweep: Sweep,
     enabled: bool,
 }
 
@@ -135,6 +64,8 @@ impl Memory for PulseChannel {
 
             self.duty.duty_cycle = duty_cycle as usize;
             self.length_counter.halt(length_counter_halt);
+
+            self.envelope.loop_flag(length_counter_halt);
             self.envelope.set_constant_volume(constant_volume_envelope_flag);
             self.envelope.set_constant_volume_or_envelope_period(
                 volume_envelope_divider_period);
@@ -173,7 +104,7 @@ impl Memory for PulseChannel {
 impl PulseChannel {
     pub fn new(complement: Complement) -> PulseChannel {
         PulseChannel {
-            duty: Duty { duty_cycle: 0, duty_position: 0 },
+            duty: Duty::new(),
             length_counter: LengthCounter::new(),
             timer: Timer::new(),
             envelope: Envelope::new(),
@@ -184,6 +115,7 @@ impl PulseChannel {
 
     pub fn enable_channel(&mut self, enabled: bool) {
         self.enabled = enabled;
+        self.length_counter.enable(enabled);
     }
 
     pub fn cycle_timer(&mut self) {
@@ -228,6 +160,108 @@ impl PulseChannel {
         let volume = self.envelope.volume() as f64;
         let duty_val = DUTY_CYCLES[self.duty.duty_cycle][self.duty.duty_position];
         volume * duty_val as f64
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_channel() -> PulseChannel {
+        let mut channel = PulseChannel::new(Complement::Two);
+        channel.duty = Duty::new();
+        channel.duty.duty_cycle = 0;
+        channel.duty.duty_position = 1;
+        channel.timer.set_period(20);
+        channel.enable_channel(true);
+        channel.envelope.set_constant_volume(true);
+        channel.envelope.set_constant_volume_or_envelope_period(5);
+        assert_eq!(
+            DUTY_CYCLES[channel.duty.duty_cycle][channel.duty.duty_position],
+            1);
+
+        channel
+    }
+
+    #[test]
+    fn output_is_zero_if_length_counter_silences_channel() {
+        let mut channel = create_test_channel();
+        channel.length_counter.counter = 5;
+        channel.length_counter.counter = 0;
+        assert_eq!(channel.output(), 0.0);
+    }
+
+    #[test]
+    fn output_is_envelope_value_if_length_counter_does_not_silence_channel() {
+        let mut channel = create_test_channel();
+        channel.length_counter.counter = 5;
+        channel.length_counter.counter = 2;
+        assert_eq!(channel.output(), 5.0);
+    }
+
+    #[test]
+    fn writing_to_0x4003_loads_length_counter() {
+        let mut channel = create_test_channel();
+        let val = (6 & 0b0001_1111) << 3;
+        channel.write(0x4003, val);
+        assert_eq!(channel.length_counter.length, 80);
+        assert_eq!(channel.length_counter.counter, 80);
+    }
+
+    #[test]
+    fn writing_to_0x4007_loads_length_counter() {
+        let mut channel = create_test_channel();
+        let val = (8 & 0b0001_1111) << 3;
+        channel.write(0x4007, val);
+        assert_eq!(channel.length_counter.length, 160);
+        assert_eq!(channel.length_counter.counter, 160);
+    }
+
+    #[test]
+    fn writing_to_0x4000_sets_length_counter_halt_flag() {
+        let mut channel = create_test_channel();
+        assert!(!channel.length_counter.halted());
+        let val = 0b0010_0000;
+        channel.write(0x4000, val);
+        assert!(channel.length_counter.halted());
+    }
+
+    #[test]
+    fn writing_to_0x4004_sets_length_counter_halt_flag() {
+        let mut channel = create_test_channel();
+        assert!(!channel.length_counter.halted());
+        let val = 0b0010_0000;
+        channel.write(0x4004, val);
+        assert!(channel.length_counter.halted());
+    }
+
+    #[test]
+    fn enabling_channel_enables_length_counter() {
+        let mut channel = create_test_channel();
+        channel.enable_channel(false);
+        assert!(!channel.length_counter.enabled());
+        channel.enable_channel(true);
+        assert!(channel.length_counter.enabled());
+    }
+
+    #[test]
+    fn disabling_channel_disables_length_counter() {
+        let mut channel = create_test_channel();
+        channel.enable_channel(true);
+        assert!(channel.length_counter.enabled());
+        channel.enable_channel(false);
+        assert!(!channel.length_counter.enabled());
+    }
+
+    #[test]
+    fn cycle_length_counter_method_actually_cycles_length_counter() {
+        let mut channel = create_test_channel();
+        channel.length_counter.halt(false);
+        channel.length_counter.length = 4;
+        channel.length_counter.counter = 4;
+        channel.cycle_length_counter();
+        assert_eq!(channel.length_counter.counter, 3);
     }
 }
 

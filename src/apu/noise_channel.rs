@@ -17,7 +17,7 @@ static PAL_RATE: [u16; 16] = [
 pub struct NoiseChannel {
     enabled: bool,
     length_counter: LengthCounter,
-    envelope: Envelope,
+    pub envelope: Envelope,
     timer: Timer,
     mode_flag: bool,
     shift_register: u16,
@@ -38,11 +38,10 @@ impl Memory for NoiseChannel {
             let volume_divider_period = (0b0000_1111 & value);
 
             self.envelope.set_constant_volume(constant_volume_envelope_flag);
-            self.
-                envelope.
+            self.envelope.
                 set_constant_volume_or_envelope_period(volume_divider_period);
 
-
+            self.envelope.loop_flag(length_counter_halt);
             self.length_counter.halt(length_counter_halt);
         } else if address == 0x400D {
             /* Unused */
@@ -110,6 +109,7 @@ impl NoiseChannel {
 
     pub fn enable_channel(&mut self, enabled: bool) {
         self.enabled = enabled;
+        self.length_counter.enable(enabled);
     }
 
     pub fn output(&self) -> f64 {

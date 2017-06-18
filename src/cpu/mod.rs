@@ -24,6 +24,7 @@ pub struct Cpu<'a> {
     x: u8,
     y: u8,
     is_odd_cycle: bool, // PPU OAM DMA timing depends on whether cpu is on odd\even cycle
+    interrupt_line: bool,
 }
 
 impl<'a> Memory for Cpu<'a> {
@@ -55,7 +56,8 @@ impl<'a> Cpu<'a> {
             a: 0,
             x: 0,
             y: 0,
-            is_odd_cycle: false
+            is_odd_cycle: false,
+            interrupt_line: false
         }
     }
 
@@ -78,18 +80,32 @@ impl<'a> Cpu<'a> {
         self.wait_counter = 7;
     }
 
-   pub fn handle_interrupt(&mut self) {
-        if self.status_flags & 0x04 != 0 {
-            return; // interrupts disabled
+    pub fn set_interrupt_line(&mut self, line: bool) {
+        self.interrupt_line = line;
+    }
+
+    fn interrupts_enabled(&self) -> bool {
+        return self.status_flags & 0x04 == 0;
+    }
+
+    pub fn handle_interrupt(&mut self) {
+        if self.interrupts_enabled() {
+           self.force_interrupt();
         }
-        self.force_interrupt();
     }
 
     pub fn execute_instruction(&mut self) {
+
+        if self.interrupt_line && self.interrupts_enabled() {
+            self.handle_interrupt();
+            return;
+        }
+
+
         let pc = self.program_counter;
         let instruction = self.read(pc);
 
-      /*  println!("{:04X} Opcode:{:02X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
+/*        println!("{:04X} Opcode:{:02X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
             self.program_counter,
             instruction,
             self.a,
@@ -97,8 +113,8 @@ impl<'a> Cpu<'a> {
             self.y,
             self.status_flags & 0xEF,
             self.stack_pointer,
-            );*/
-
+            );
+*/
         self.program_counter += 1;
         match instruction {
             0 => self.force_interrupt(),
@@ -180,6 +196,7 @@ impl<'a> Cpu<'a> {
             85 => self.exclusive_or_zero_page_x(),
             86 => self.logical_shift_right_zero_page_x(),
             87 => self.unofficial_shift_right_memory_xor_acc_zero_page_x(),
+            88 => self.clear_interrupt_disable_flag(),
             89 => self.exclusive_or_absolute_y(),
             90 => self.unofficial_nop(),
             91 => self.unofficial_shift_right_memory_xor_acc_absolute_y(),
@@ -1127,6 +1144,11 @@ impl<'a> Cpu<'a> {
         self.status_flags = self.status_flags | 0x08; // set bit 3
     }
 
+    fn clear_interrupt_disable_flag(&mut self) {
+        self.wait_counter = 2;
+        self.status_flags = self.status_flags & !0x04;
+    }
+
     fn set_interrupt_disable_flag(&mut self) {
         self.wait_counter = 2;
         self.status_flags = self.status_flags | 0x04; // set bit 2
@@ -1470,8 +1492,7 @@ impl<'a> Cpu<'a> {
     fn compare_y_zero_page(&mut self) {
         let register = self.y;
         let operand = self.read_zero_page();
-        self.do_compare(register, operand);
-
+        self.do_compare(register, operand)
     }
 
     fn compare_y_absolute(&mut self) {
@@ -5674,6 +5695,29 @@ mod tests {
     }
 
     #[test]
+    fn clear_interrupt_disable_flag_does_nothing_flag_is_already_unset() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0xFB;
+        cpu.clear_interrupt_disable_flag();
+        assert_eq!(0xFB, cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_interrupt_disable_flag_clears_the_flag_and_does_not_touch_other_flags() {
+        let mut cpu = create_test_cpu();
+        cpu.status_flags = 0xFF;
+        cpu.clear_interrupt_disable_flag();
+        assert_eq!(0xFB, cpu.status_flags);
+    }
+
+    #[test]
+    fn clear_interrupt_disable_flag_sets_wait_counter_correctly() {
+        let mut cpu = create_test_cpu();
+        cpu.clear_interrupt_disable_flag();
+        assert_eq!(2, cpu.wait_counter);
+    }
+
+    #[test]
     fn clear_overflow_flag_clears_the_flag() {
         let mut cpu = create_test_cpu();
         cpu.status_flags = 0xFF;
@@ -9604,5 +9648,4 @@ mod tests {
         cpu.write(0x4014, 0x12);
         assert_eq!(514, cpu.wait_counter);
     }
-
 }

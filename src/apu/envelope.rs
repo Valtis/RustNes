@@ -1,7 +1,7 @@
 
 pub struct Divider {
-	length: u8,
-	counter: u8,
+	pub length: u8,
+	pub counter: u8,
 }
 
 
@@ -17,11 +17,11 @@ impl Divider {
 
 // in constant volume mode, output is Divider length minus one, otherwise the volume is the counter value
 pub struct Envelope {
-	start_flag: bool,
-	loop_flag: bool,
-	constant_volume: bool,
-	divider: Divider,
-	counter: u8,
+	pub start_flag: bool,
+	pub loop_flag: bool,
+	pub constant_volume: bool,
+	pub divider: Divider,
+	pub counter: u8,
 }
 
 impl Envelope {
@@ -68,9 +68,13 @@ impl Envelope {
 		self.start_flag = true;
 	}
 
+	pub fn loop_flag(&mut self, flag: bool) {
+		self.loop_flag = flag;
+ 	}
+
 	pub fn volume(&self) -> u8 {
 		if self.constant_volume {
-			self.divider.length
+			self.divider.length - 1
 		} else {
 			self.counter
 		}
@@ -217,20 +221,28 @@ mod tests {
 	}
 
 	#[test]
-	fn envelope_volume_is_divider_length_if_constant_flag_is_set() {
+	fn volume_output_is_the_envelope_period_if_constant_flag_is_set() {
 		let mut envelope = create_test_envelope();
 		envelope.constant_volume = true;
-		envelope.divider.length = 20;
-		assert_eq!(20, envelope.volume());
+
+		envelope.divider.length = 0;
+		envelope.divider.counter = 0;
+
+		envelope.set_constant_volume_or_envelope_period(19);
+		assert_eq!(19, envelope.volume());
 	}
 
 	#[test]
 	fn envelope_volume_is_not_affected_by_cycling_if_constant_flag_is_set() {
 		let mut envelope = create_test_envelope();
 		envelope.constant_volume = true;
-		envelope.divider.length = 20;
+
+		envelope.divider.length = 0;
+		envelope.divider.counter = 0;
+
+		envelope.set_constant_volume_or_envelope_period(19);
 		envelope.cycle();
-		assert_eq!(20, envelope.volume());
+		assert_eq!(19, envelope.volume());
 	}
 
 	#[test]
@@ -240,5 +252,14 @@ mod tests {
 		envelope.divider.length = 20;
 		envelope.counter = 4;
 		assert_eq!(4, envelope.volume());
+	}
+
+	#[test]
+	fn divider_period_is_period_plus_one() {
+		let mut envelope = create_test_envelope();
+		envelope.divider.length = 0;
+		envelope.divider.counter = 0;
+		envelope.set_constant_volume_or_envelope_period(19);
+		assert_eq!(20, envelope.divider.length);
 	}
 }
